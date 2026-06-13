@@ -26,14 +26,26 @@
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 4v16"/></svg>',
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>',
   ];
-  let currentSizeIndex = 0;
+  const SIZE_TITLES = ['Half width', 'Three-quarter width', 'Full width'];
+  // Default to full width so the chat uses the whole page; remember the choice.
+  let currentSizeIndex = 2;
+  try {
+    const saved = parseInt(localStorage.getItem('rl-chat-size'), 10);
+    if (saved >= 0 && saved < SIZES.length) currentSizeIndex = saved;
+  } catch {}
 
-  $btnChatSize.addEventListener('click', () => {
-    $chatContainer.classList.remove(SIZES[currentSizeIndex]);
-    currentSizeIndex = (currentSizeIndex + 1) % SIZES.length;
+  function applySize() {
+    SIZES.forEach((s) => $chatContainer.classList.remove(s));
     $chatContainer.classList.add(SIZES[currentSizeIndex]);
     $btnChatSize.innerHTML = SIZE_ICONS[currentSizeIndex];
-    $btnChatSize.title = ['Half width', 'Three-quarter width', 'Full width'][currentSizeIndex];
+    $btnChatSize.title = SIZE_TITLES[currentSizeIndex];
+  }
+  applySize();
+
+  $btnChatSize.addEventListener('click', () => {
+    currentSizeIndex = (currentSizeIndex + 1) % SIZES.length;
+    applySize();
+    try { localStorage.setItem('rl-chat-size', String(currentSizeIndex)); } catch {}
   });
 
   // ─── Init ──────────────────────────────────────────────────────────
@@ -47,8 +59,12 @@
           `<option value="${a.id}">${escapeHtml(a.name)}</option>`
         ).join('');
 
-        // Prefer orphil-advisory, fallback to first
-        const preferred = allAgents.find(a => a.slug === 'orphil-advisory') || allAgents[0];
+        // Honor ?agent=<id|slug> so "Open chat" lands on the requested agent
+        // (e.g. the Freight Accrual Process Owner Agent), not a default.
+        const want = new URLSearchParams(location.search).get('agent');
+        const preferred =
+          (want && allAgents.find(a => a.id === want || a.slug === want)) ||
+          allAgents[0];
         $agentSelect.value = preferred.id;
         selectAgent(preferred);
       } else {
@@ -64,6 +80,7 @@
     currentAgentId = agent.id;
     $agentAvatar.textContent = agent.branding?.avatar || agent.name.charAt(0);
     $agentDescription.textContent = agent.description;
+    if ($input) $input.placeholder = `Ask ${agent.name}...`;
     // Update welcome message
     const welcome = $messages.querySelector('.welcome-message');
     if (welcome) {
@@ -98,14 +115,36 @@
         return;
       }
       $conversationList.innerHTML = json.data.map(c => `
-        <button class="conversation-item ${c.id === currentConversationId ? 'active' : ''}" data-id="${c.id}">
-          <span class="conv-title">${escapeHtml(c.title || 'New conversation')}</span>
-          <span class="conv-meta">${formatDate(c.lastMessageAt || c.createdAt)}</span>
-        </button>
+        <div class="conversation-item ${c.id === currentConversationId ? 'active' : ''}" data-id="${c.id}">
+          <div class="conv-main" data-id="${c.id}">
+            <span class="conv-title">${escapeHtml(c.title || 'New conversation')}</span>
+            <span class="conv-meta">${formatDate(c.lastMessageAt || c.createdAt)}</span>
+          </div>
+          <button class="conv-del" data-id="${c.id}" title="Delete conversation" aria-label="Delete conversation">&times;</button>
+        </div>
       `).join('');
 
-      $conversationList.querySelectorAll('.conversation-item').forEach(btn => {
-        btn.addEventListener('click', () => loadConversation(btn.dataset.id));
+      $conversationList.querySelectorAll('.conv-main').forEach(el => {
+        el.addEventListener('click', () => loadConversation(el.dataset.id));
+      });
+      $conversationList.querySelectorAll('.conv-del').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          // Two-click inline confirm (no native dialog): first click arms the
+          // button, second click within 3s deletes. Auto-reverts otherwise.
+          if (btn.dataset.armed === '1') { deleteConversation(btn.dataset.id); return; }
+          btn.dataset.armed = '1';
+          btn.classList.add('confirm');
+          btn.textContent = '✓';
+          btn.title = 'Click again to confirm delete';
+          clearTimeout(btn._revert);
+          btn._revert = setTimeout(() => {
+            btn.dataset.armed = '0';
+            btn.classList.remove('confirm');
+            btn.textContent = '×';
+            btn.title = 'Delete conversation';
+          }, 3000);
+        });
       });
     } catch {
       // silently fail
@@ -230,6 +269,8 @@
       }
 
       loadConversations();
+      // the LLM-refined title lands a moment after the stream ends
+      setTimeout(loadConversations, 2500);
     } catch (err) {
       appendSystemMessage('Connection error: ' + err.message);
     }
@@ -324,9 +365,9 @@
     $input.style.height = Math.min($input.scrollHeight, 150) + 'px';
   });
 
-  $btnNewChat.addEventListener('click', () => {
+  function resetToWelcome() {
     currentConversationId = null;
-    const agent = allAgents.find(a => a.id === currentAgentId) || { name: 'Orphil', description: 'AI Advisory Assistant' };
+    const agent = allAgents.find(a => a.id === currentAgentId) || { name: 'Ridgeline Finance OS', description: 'Process Owner Agent' };
     const avatar = agent.branding?.avatar || agent.name.charAt(0);
     $messages.innerHTML = `
       <div class="welcome-message">
@@ -335,6 +376,20 @@
         <p>${escapeHtml(agent.description)}</p>
       </div>
     `;
+  }
+
+  async function deleteConversation(convId) {
+    try {
+      await fetch(`${API}/chat/${convId}`, { method: 'DELETE' });
+      if (convId === currentConversationId) resetToWelcome();
+      loadConversations();
+    } catch {
+      // non-critical
+    }
+  }
+
+  $btnNewChat.addEventListener('click', () => {
+    resetToWelcome();
     loadConversations();
   });
 

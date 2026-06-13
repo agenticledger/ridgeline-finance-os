@@ -1,12 +1,12 @@
 /* ─── Admin Panel ─────────────────────────────────────────────────── */
 .admin-page {
-  padding-top: calc(var(--nav-height) + 32px);
+  padding-top: 32px;
   min-height: 100vh;
   background: var(--bg-primary);
 }
 
 .admin-container {
-  max-width: 960px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 0 24px 48px;
 }

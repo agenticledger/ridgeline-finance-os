@@ -70,15 +70,15 @@
 }
 
 .conversation-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
-  text-align: left;
-  padding: 10px 12px;
+  padding: 8px 8px 8px 12px;
   margin-bottom: 4px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  cursor: pointer;
   transition: background var(--transition-fast);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -90,7 +90,48 @@
 
 .conversation-item.active {
   background: var(--accent-subtle);
-  border: 1px solid var(--border-default);
+  border-color: var(--border-default);
+}
+
+.conv-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conv-del {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.conversation-item:hover .conv-del,
+.conversation-item.active .conv-del {
+  opacity: 1;
+}
+
+.conv-del:hover {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/* Armed state: first click turns the X into a confirm check. */
+.conv-del.confirm {
+  opacity: 1;
+  background: var(--bad);
+  color: #fff;
 }
 
 .conv-title {
@@ -445,4 +486,41 @@
   .message-body {
     max-width: calc(100vw - 80px);
   }
+}
+
+/* ─── Ridgeline Finance OS theme override ───────────────────────────────
+   chat.css was borrowed from a sibling project and consumes that project's
+   palette vars (--accent-primary, --bg-surface, etc. from styles.css).
+   Remap them to Ridgeline's fos.css vars so the modal matches our site and
+   carries the violet "agent" identity used by the in-process chat dock.
+   fos.css already redefines its vars per [data-theme], so this auto-themes
+   for both light and dark with no duplicate blocks. */
+.chat-page{
+  --bg-primary: var(--bg);
+  --bg-surface: var(--panel);
+  --bg-elevated: var(--panel-2);
+  --bg-subtle: var(--line-2);
+  --bg-hover: var(--line-2);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-2);
+  --text-tertiary: var(--muted);
+  --text-muted: var(--muted);
+  --accent-primary: var(--violet);
+  --accent-light: var(--violet);
+  --accent-dark: var(--violet);
+  --accent-subtle: var(--violet-soft);
+  --accent-glow: var(--violet-soft);
+  --border-default: var(--line);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+  --border-accent: var(--violet);
+  --radius-sm: 9px; --radius-md: 12px; --radius-lg: 16px;
+  /* sticky fos topbar already occupies flow space, so no extra top gap */
+  --nav-height: 56px;
+  padding-top: 0;
+}
+/* agent avatar reads as a solid violet token, not the cyan gradient */
+.chat-page .agent-avatar{
+  background: var(--violet) !important;
+  color:#fff;
 }

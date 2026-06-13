@@ -14,10 +14,11 @@
 
   // Authenticated fetch — auto-logout on 401
   async function adminFetch(url, opts = {}) {
+    const isFormData = opts.body instanceof FormData;
     const res = await fetch(url, {
       ...opts,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(opts.headers || {}),
         'X-Admin-Key': adminKey,
       },
@@ -72,8 +73,7 @@
   function showDashboard() {
     $loginScreen.style.display = 'none';
     $dashboard.style.display = 'block';
-    loadAgents();
-    loadKbAgents();
+    if (window.AgentManager) window.AgentManager.open();
     loadLlmConfig();
     loadSettings();
   }
@@ -104,277 +104,11 @@
       tab.classList.add('active');
       document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
 
-      // Lazy-load MCP tab on first click
+      // Lazy-load per-tab content
       if (tab.dataset.tab === 'mcp') loadMcpServers();
+      if (tab.dataset.tab === 'agentmgmt' && window.AgentManager) window.AgentManager.open();
     });
   });
-
-  // ─── Agents ────────────────────────────────────────────────────────
-  const $agentList = document.getElementById('agentList');
-  const $agentModal = document.getElementById('agentModal');
-
-  async function loadAgents() {
-    try {
-      const res = await adminFetch(`${API}/agents`);
-      const json = await res.json();
-
-      if (!json.ok || json.data.length === 0) {
-        $agentList.innerHTML = '<p class="empty-state">No agents yet. Create one to get started.</p>';
-        return;
-      }
-
-      $agentList.innerHTML = json.data.map(a => `
-        <div class="agent-card">
-          <div class="agent-card-info">
-            <h4>${escapeHtml(a.name)}</h4>
-            <p>${escapeHtml(a.description)} &middot; ${a.kbDocumentCount || 0} docs</p>
-          </div>
-          <div class="agent-card-actions">
-            <button class="btn-sm" onclick="window._adminEditAgent('${a.id}')">Edit</button>
-            <button class="btn-sm danger" onclick="window._adminDeleteAgent('${a.id}', '${escapeHtml(a.name)}')">Delete</button>
-          </div>
-        </div>
-      `).join('');
-    } catch (err) {
-      if (err.isAuthError) return;
-      $agentList.innerHTML = '<p class="empty-state">Failed to load agents</p>';
-    }
-  }
-
-  // Populate the model <select> in the agent modal
-  // If providers not yet loaded, fetch them first
-  async function populateAgentModelSelect(currentValue) {
-    if (providers.length === 0) {
-      try {
-        const res = await adminFetch(`${API}/llm-config/providers`);
-        const json = await res.json();
-        if (json.ok) providers = json.data;
-      } catch {
-        // silently fail — show empty dropdown
-      }
-    }
-
-    const $sel = document.getElementById('agentModelInput');
-    $sel.innerHTML = '<option value="">Use platform default</option>';
-    providers.forEach(p => {
-      const grp = document.createElement('optgroup');
-      grp.label = p.name;
-      p.models.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name;
-        grp.appendChild(opt);
-      });
-      $sel.appendChild(grp);
-    });
-    if (currentValue) $sel.value = currentValue;
-  }
-
-  document.getElementById('btnCreateAgent').addEventListener('click', async () => {
-    document.getElementById('agentModalTitle').textContent = 'Create Agent';
-    document.getElementById('agentEditId').value = '';
-    document.getElementById('agentNameInput').value = '';
-    document.getElementById('agentDescInput').value = '';
-    document.getElementById('agentInstructionsInput').value = '';
-    await populateAgentModelSelect('');
-    $agentModal.classList.remove('hidden');
-  });
-
-  document.getElementById('btnCancelAgent').addEventListener('click', () => {
-    $agentModal.classList.add('hidden');
-  });
-
-  document.getElementById('btnSaveAgent').addEventListener('click', async () => {
-    const editId = document.getElementById('agentEditId').value;
-    const payload = {
-      name: document.getElementById('agentNameInput').value.trim(),
-      description: document.getElementById('agentDescInput').value.trim(),
-      instructions: document.getElementById('agentInstructionsInput').value.trim(),
-      defaultModel: document.getElementById('agentModelInput').value.trim() || null,
-    };
-
-    if (!payload.name || !payload.description || !payload.instructions) {
-      toast('Name, description, and instructions are required', 'error');
-      return;
-    }
-
-    try {
-      const url = editId ? `${API}/agents/${editId}` : `${API}/agents`;
-      const method = editId ? 'PATCH' : 'POST';
-
-      const res = await adminFetch(url, { method, body: JSON.stringify(payload) });
-      const json = await res.json();
-
-      if (json.ok) {
-        $agentModal.classList.add('hidden');
-        toast(editId ? 'Agent updated' : 'Agent created', 'success');
-        loadAgents();
-        loadKbAgents();
-      } else {
-        toast(json.error || 'Failed to save', 'error');
-      }
-    } catch (err) {
-      if (!err.isAuthError) toast('Connection error', 'error');
-    }
-  });
-
-  window._adminEditAgent = async function (id) {
-    try {
-      const res = await adminFetch(`${API}/agents/${id}`);
-      const json = await res.json();
-      if (!json.ok) return;
-
-      const a = json.data;
-      document.getElementById('agentModalTitle').textContent = 'Edit Agent';
-      document.getElementById('agentEditId').value = id;
-      document.getElementById('agentNameInput').value = a.name;
-      document.getElementById('agentDescInput').value = a.description;
-      document.getElementById('agentInstructionsInput').value = a.instructions;
-      await populateAgentModelSelect(a.defaultModel || '');
-      $agentModal.classList.remove('hidden');
-    } catch (err) {
-      if (!err.isAuthError) toast('Failed to load agent', 'error');
-    }
-  };
-
-  window._adminDeleteAgent = async function (id, name) {
-    if (!confirm(`Delete agent "${name}"? This cannot be undone.`)) return;
-
-    try {
-      const res = await adminFetch(`${API}/agents/${id}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.ok) {
-        toast('Agent deleted', 'success');
-        loadAgents();
-      } else {
-        toast(json.error || 'Failed to delete', 'error');
-      }
-    } catch (err) {
-      if (!err.isAuthError) toast('Connection error', 'error');
-    }
-  };
-
-  // ─── Knowledge Base ────────────────────────────────────────────────
-  const $kbAgentSelect = document.getElementById('kbAgentSelect');
-  const $kbDocPanel = document.getElementById('kbDocPanel');
-  const $docList = document.getElementById('docList');
-  const $docModal = document.getElementById('docModal');
-  let currentKbAgentId = null;
-
-  async function loadKbAgents() {
-    try {
-      const res = await adminFetch(`${API}/agents`);
-      const json = await res.json();
-      if (json.ok && json.data.length > 0) {
-        $kbAgentSelect.innerHTML = '<option value="">Select an agent to manage its documents...</option>' +
-          json.data.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
-      } else {
-        $kbAgentSelect.innerHTML = '<option value="">No agents yet — create one in the Agents tab first</option>';
-      }
-    } catch {
-      // silently fail
-    }
-  }
-
-  $kbAgentSelect.addEventListener('change', () => {
-    currentKbAgentId = $kbAgentSelect.value || null;
-    if (currentKbAgentId) {
-      $kbDocPanel.style.display = 'block';
-      loadDocuments();
-    } else {
-      $kbDocPanel.style.display = 'none';
-    }
-  });
-
-  async function loadDocuments() {
-    if (!currentKbAgentId) return;
-    $docList.innerHTML = '<p class="empty-state">Loading...</p>';
-    try {
-      const res = await adminFetch(`${API}/agents/${currentKbAgentId}/documents`);
-      const json = await res.json();
-      if (!json.ok || json.data.length === 0) {
-        $docList.innerHTML = '<p class="empty-state">No documents yet. Click "+ Add Document" to give this agent knowledge.</p>';
-        return;
-      }
-      $docList.innerHTML = json.data.map(d => `
-        <div class="agent-card">
-          <div class="agent-card-info">
-            <h4>${escapeHtml(d.name)}</h4>
-            <p>${escapeHtml(d.sourceType)} &middot; ${d.chunkCount || 0} chunks &middot; ${new Date(d.createdAt).toLocaleDateString()}</p>
-          </div>
-          <div class="agent-card-actions">
-            <button class="btn-sm danger" onclick="window._adminDeleteDoc('${d.id}')">Delete</button>
-          </div>
-        </div>
-      `).join('');
-    } catch (err) {
-      if (!err.isAuthError) $docList.innerHTML = '<p class="empty-state">Failed to load documents</p>';
-    }
-  }
-
-  document.getElementById('btnAddDoc').addEventListener('click', () => {
-    document.getElementById('docNameInput').value = '';
-    document.getElementById('docContentInput').value = '';
-    $docModal.classList.remove('hidden');
-  });
-
-  document.getElementById('btnCancelDoc').addEventListener('click', () => {
-    $docModal.classList.add('hidden');
-  });
-
-  document.getElementById('btnSaveDoc').addEventListener('click', async () => {
-    const name = document.getElementById('docNameInput').value.trim();
-    const content = document.getElementById('docContentInput').value.trim();
-
-    if (!name || !content) {
-      toast('Name and content are required', 'error');
-      return;
-    }
-
-    const btn = document.getElementById('btnSaveDoc');
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
-
-    try {
-      const res = await adminFetch(`${API}/agents/${currentKbAgentId}/documents`, {
-        method: 'POST',
-        body: JSON.stringify({ name, content, sourceType: 'text' }),
-      });
-      const json = await res.json();
-
-      if (json.ok) {
-        $docModal.classList.add('hidden');
-        const msg = json.data.ingested ? 'Document saved & embedded' : 'Document saved (add OpenAI key to enable embeddings)';
-        toast(msg, 'success');
-        loadDocuments();
-        loadAgents();
-      } else {
-        toast(json.error || 'Failed to save document', 'error');
-      }
-    } catch (err) {
-      if (!err.isAuthError) toast('Connection error', 'error');
-    }
-
-    btn.disabled = false;
-    btn.textContent = 'Save Document';
-  });
-
-  window._adminDeleteDoc = async function (id) {
-    if (!confirm('Delete this document? This cannot be undone.')) return;
-    try {
-      const res = await adminFetch(`${API}/agents/${currentKbAgentId}/documents/${id}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.ok) {
-        toast('Document deleted', 'success');
-        loadDocuments();
-        loadAgents();
-      } else {
-        toast(json.error || 'Failed to delete', 'error');
-      }
-    } catch (err) {
-      if (!err.isAuthError) toast('Connection error', 'error');
-    }
-  };
 
   // ─── MCP Servers ───────────────────────────────────────────────────
   const $mcpList = document.getElementById('mcpList');

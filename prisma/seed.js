@@ -84,6 +84,9 @@ const STEPS = [
 // Reusable tools, mapped to the process. "Automation" tools are the deterministic
 // code engines that execute a step's logic (the old engineSource is now a tool of
 // type automation). Agents, prompts and integrations round out the registry.
+// Agents are NOT seeded here — they live in the real Agent table and are
+// auto-provisioned as each process's owner (see processAgentService). The
+// registry sources agents live from that table, so there are no placeholders.
 const TOOLS = [
   // Automations — deterministic code engines (the "engine source" of each step)
   { type: 'automation', slug: 'shipment-ingest', name: 'Shipment Ingest', desc: 'Parses raw shipment activity, dedupes, infers missing weights from unit medians.', role: 'ingest', engine: 'ingest.js' },
@@ -95,28 +98,25 @@ const TOOLS = [
   { type: 'automation', slug: 'exception-engine', name: 'Exception Engine', desc: 'Raises and ranks exceptions (critical / warning / info) for overseer review.', role: 'controls', engine: 'compute.js' },
   { type: 'automation', slug: 'materiality-gate', name: 'Materiality Gate', desc: 'Materiality x confidence gate routing carriers to auto-post / review / escalate.', role: 'gate', engine: 'accrualService.js' },
   { type: 'automation', slug: 'journal-poster', name: 'Journal Poster', desc: 'Posts the balanced accrual JE (6100 Dr / 2150 Cr) once the gate clears or a human signs off.', role: 'posting', engine: 'accrualService.js' },
-  // Agents — autonomous workers
-  { type: 'agent', slug: 'accrual-agent', name: 'Accrual Agent', desc: 'Owns the end-to-end accrual run; executes steps, raises exceptions.', role: 'owner' },
-  { type: 'agent', slug: 'improvement-agent', name: 'Improvement Agent', desc: 'Reconciles booked vs actual and proposes policy changes.', role: 'improve' },
-  // Integration + prompt
+  // MCP + prompt
   { type: 'mcp', slug: 'finance-os-mcp', name: 'Finance OS MCP', desc: 'MCP tools exposing run/estimate/reconcile/apply over the process objects.', role: 'integration' },
   { type: 'prompt', slug: 'variance-narrative', name: 'Variance Narrative Prompt', desc: 'Prompt template that turns a run summary into a controller-ready variance narrative.', role: 'reporting' },
 ];
 
 // Each step draws many tools from the registry. The first entry is the step's
-// primary automation (its engine); additional entries are the agents, prompts
-// and integrations that also run on the step.
+// primary automation (its engine); additional entries are the prompts and MCP
+// servers that also run on the step. The owning agent is Process.ownerAgent.
 const STEP_TOOLS = {
-  ingest: ['shipment-ingest', 'accrual-agent'],
-  normalize: ['carrier-normalizer', 'accrual-agent'],
+  ingest: ['shipment-ingest'],
+  normalize: ['carrier-normalizer'],
   price: ['freight-rate-engine'],
   calibrate: ['calibration-engine'],
   baseline: ['baseline-engine'],
-  estimate: ['ensemble-estimator', 'accrual-agent'],
+  estimate: ['ensemble-estimator'],
   exceptions: ['exception-engine'],
   gate: ['materiality-gate'],
   post_je: ['journal-poster', 'finance-os-mcp'],
-  reconcile_learn: ['improvement-agent', 'variance-narrative'],
+  reconcile_learn: ['variance-narrative'],
 };
 
 // Policies — the tunable knobs (params = Policy, algorithms = code; plan G1).

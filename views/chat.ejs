@@ -1,5 +1,21 @@
-<%- include('partials/head') %>
-<%- include('partials/nav') %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+
+<%- include('partials/topbar', { active: 'agents' }) %>
 
 <main class="chat-page">
   <div class="chat-container">
@@ -16,12 +32,12 @@
     <div class="chat-main">
       <div class="chat-header" id="chatHeader">
         <div class="agent-info">
-          <div class="agent-avatar" id="agentAvatar">O</div>
+          <div class="agent-avatar" id="agentAvatar">R</div>
           <div>
             <select id="agentSelect" class="agent-select" title="Switch agent">
               <option value="">Loading agents...</option>
             </select>
-            <p id="agentDescription">AI Advisory Assistant</p>
+            <p id="agentDescription">Process Owner Agent</p>
           </div>
         </div>
         <div class="header-actions">
@@ -36,15 +52,15 @@
 
       <div class="chat-messages" id="chatMessages">
         <div class="welcome-message">
-          <div class="agent-avatar large">O</div>
-          <h3>Welcome to Orphil</h3>
-          <p>I'm Orphil's AI assistant. I can help you learn about our AI transformation services for finance, accounting, and consulting firms. Ask me anything.</p>
+          <div class="agent-avatar large">R</div>
+          <h3>Ridgeline Finance OS</h3>
+          <p>Loading the Process Owner Agent...</p>
         </div>
       </div>
 
       <div class="chat-input-area">
         <div class="chat-input-wrapper">
-          <textarea id="chatInput" placeholder="Ask Orphil anything..." rows="1" maxlength="10000"></textarea>
+          <textarea id="chatInput" placeholder="Ask the Process Owner Agent..." rows="1" maxlength="10000"></textarea>
           <button class="btn-send" id="btnSend" title="Send message">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
@@ -55,7 +71,8 @@
   </div>
 </main>
 
-<link rel="stylesheet" href="/css/chat.css">
-<script src="/js/chat.js"></script>
-
-<%- include('partials/footer') %>
+<link rel="stylesheet" href="/css/chat.css?v=4">
+<script src="/js/theme.js"></script>
+<script src="/js/chat.js?v=4"></script>
+</body>
+</html>

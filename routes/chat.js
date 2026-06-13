@@ -307,16 +307,20 @@ router.post('/:conversationId/stream', async (req, res, next) => {
         },
       });
 
+      const firstExchange = conversation.messageCount === 0;
       await prisma.conversation.update({
         where: { id: conversation.id },
         data: {
           messageCount: { increment: 2 },
           lastMessageAt: new Date(),
+          // Instant fallback title so the sidebar never shows "New conversation"
+          // for an active chat; the LLM refines it a moment later.
+          ...(firstExchange ? { title: content.trim().slice(0, 60) } : {}),
         },
       });
 
       // Auto-title after first exchange
-      if (conversation.messageCount === 0 && llmConfig.apiKey) {
+      if (firstExchange && llmConfig.apiKey) {
         autoTitle(conversation.id, content, fullResponse, llmConfig).catch(() => {});
       }
     }
@@ -332,17 +336,18 @@ async function autoTitle(conversationId, userMessage, assistantMessage, llmConfi
 
   try {
     const provider = getProviderForModel(llmConfig.model);
+    // The conversation must end with a user message (no assistant prefill), so
+    // fold the exchange into a single user turn asking for the title.
     const result = await provider.generate(
       [
-        { role: 'system', content: 'Generate a short title (max 6 words) for this conversation. Return ONLY the title, no quotes.' },
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: assistantMessage.slice(0, 500) },
+        { role: 'system', content: 'You write short, specific conversation titles. Reply with ONLY the title, at most 6 words, no quotes and no trailing punctuation.' },
+        { role: 'user', content: `Write a title for this conversation.\n\nUser: ${userMessage}\n\nAssistant: ${assistantMessage.slice(0, 500)}` },
       ],
       llmConfig.model,
       llmConfig.apiKey,
     );
 
-    const title = result.text.trim().slice(0, 255);
+    const title = result.text.trim().replace(/^["']|["']$/g, '').slice(0, 80);
     if (title) {
       await prisma.conversation.update({
         where: { id: conversationId },

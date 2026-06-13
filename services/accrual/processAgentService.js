@@ -118,7 +118,7 @@ async function provisionOwnerAgent(processId, { regeneratePrompt = true } = {}) 
 
   const slug = agentSlugFor(process.slug);
   const instructions = buildSupervisorPrompt(process);
-  const description = `Process Owner Agent — the accountable supervisor for ${process.name}. Observes runs, explains state, and can trigger steps. Not in the critical path.`;
+  const description = `Process Owner Agent, the accountable supervisor for ${process.name}. Observes runs, explains state, and can trigger steps. Not in the critical path.`;
 
   let agent = await prisma.agent.findUnique({ where: { slug } });
   if (agent) {

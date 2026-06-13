@@ -198,7 +198,7 @@ const API_GROUPS = [
       },
       {
         op: 'fos_list_tools', method: 'GET', path: '/api/fos/tools', auth: 'none',
-        summary: 'List the global tool registry (skills, agents, prompts, integrations) a process can bind.',
+        summary: 'List the global tool registry (automations, skills, agents, prompts, MCP servers) a process can bind.',
         params: [], body: [],
         returns: 'Array of tools { id, slug, name, type, description }.',
       },

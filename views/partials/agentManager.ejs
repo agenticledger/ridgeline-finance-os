@@ -1,60 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= pageTitle %></title>
-  <meta name="description" content="<%= pageDescription %>">
-  <meta name="robots" content="noindex">
-  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=15">
-</head>
-<body>
-
-<header class="topbar"><div class="row">
-  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Mission Control</small></span></a>
-  <div class="orgsel" title="Organization (tenant)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M19 21V11a2 2 0 0 0-2-2h-2"/><path d="M9 7h2M9 11h2M9 15h2"/></svg>
-    <select aria-label="Organization" disabled><option><%= org && org.name ? org.name : org %></option></select>
-  </div>
-  <a class="navlink" href="/registry">Tools Registry</a>
-  <div class="grow"></div>
-  <%- include('partials/docsmenu') %>
-  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
-    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-  </button>
-</div></header>
-
-<div class="wsub"><div class="row">
-  <a class="wsub-back" href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Processes</a>
-  <span class="wsub-sep"></span>
-  <span class="wsub-tile defined">A</span>
-  <div class="wsub-id">
-    <h1>Agents</h1>
-    <p>The agents that own and improve finance processes. Manage instructions, knowledge, long-term memory, and capabilities.</p>
-  </div>
-  <div class="grow"></div>
-  <button class="btn ghost" id="lockBtn" type="button" hidden>Sign out</button>
-</div></div>
-
-<!-- Login gate -->
-<div class="ag-gate" id="authGate" hidden>
-  <form class="ag-gatecard" id="authForm">
-    <h2>Admin sign in</h2>
-    <p>Managing agents requires the admin key. Sign in to continue.</p>
-    <label class="ag-lab">Password</label>
-    <input type="password" id="authPw" autocomplete="current-password" placeholder="Admin password">
-    <p class="ag-error" id="authErr" hidden></p>
-    <button class="btn primary" type="submit">Sign in</button>
-  </form>
-</div>
-
-<!-- Console -->
-<div class="agwrap" id="console" hidden>
+<!-- Agent Management — per-agent editor (Profile / Knowledge / Memory / MCPs).
+     Relocated from the old /agents page; runs inside the admin shell (no own gate). -->
+<div class="agwrap" id="agmgmtConsole">
   <!-- LEFT: agent list -->
   <section class="aglist">
     <div class="aglist-head">
@@ -81,13 +27,6 @@
 
 <script>
 (function(){
-  var TOKEN_KEY='rl-admin-token';
-  var gate=document.getElementById('authGate');
-  var consoleEl=document.getElementById('console');
-  var authForm=document.getElementById('authForm');
-  var authPw=document.getElementById('authPw');
-  var authErr=document.getElementById('authErr');
-  var lockBtn=document.getElementById('lockBtn');
   var agItems=document.getElementById('agItems');
   var agCount=document.getElementById('agCount');
   var agEmpty=document.getElementById('agEmpty');
@@ -101,34 +40,27 @@
   var selectedId=null;
   var activeTab='profile';
 
+  function readToken(){
+    try{return sessionStorage.getItem('orphil_admin_key')||localStorage.getItem('rl-admin-token');}catch(e){return null;}
+  }
+
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+  function expired(){
+    try{sessionStorage.removeItem('orphil_admin_key');}catch(e){}
+    alert('Session expired. Please sign in again.');
+    location.reload();
+  }
 
   function api(method,path,body){
     var opts={method:method,headers:{}};
     if(token)opts.headers['X-Admin-Key']=token;
     if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
     return fetch(path,opts).then(function(r){
-      if(r.status===401){signOut();throw new Error('Session expired. Sign in again.');}
+      if(r.status===401){expired();throw new Error('Session expired.');}
       return r.json().then(function(j){if(!j.ok&&j.ok!==undefined&&j.error)throw new Error(j.error);return j;});
     });
   }
-
-  // ── Auth ──
-  function signOut(){token=null;try{localStorage.removeItem(TOKEN_KEY);}catch(e){}gate.hidden=false;consoleEl.hidden=true;lockBtn.hidden=true;}
-  function signedIn(){gate.hidden=true;consoleEl.hidden=false;lockBtn.hidden=false;loadAgents();}
-  lockBtn.addEventListener('click',signOut);
-
-  authForm.addEventListener('submit',function(e){
-    e.preventDefault();authErr.hidden=true;
-    fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:authPw.value})})
-      .then(function(r){return r.json();})
-      .then(function(j){
-        if(!j.ok){authErr.textContent=j.error||'Invalid password';authErr.hidden=false;return;}
-        token=j.data.token;try{localStorage.setItem(TOKEN_KEY,token);}catch(e){}
-        authPw.value='';signedIn();
-      })
-      .catch(function(){authErr.textContent='Could not sign in.';authErr.hidden=false;});
-  });
 
   // ── Agent list ──
   function loadAgents(){
@@ -156,6 +88,12 @@
   // ── Agent detail ──
   function selectAgent(id){selectedId=id;activeTab='profile';renderList();renderDetail();}
 
+  // Flip a feature flag on agent.features and persist (PATCH merges the whole object).
+  function setFeature(a,key,value){
+    var feats=Object.assign({},a.features||{});feats[key]=value;
+    api('PATCH','/api/agents/'+a.id,{features:feats}).then(function(){loadAgents();}).catch(function(err){alert(err.message);});
+  }
+
   function renderDetail(){
     var a=agents.find(function(x){return x.id===selectedId;});
     if(!a){agEmpty.hidden=false;agDetail.hidden=true;return;}
@@ -164,13 +102,14 @@
       '<div class="ag-dhead">'+
         '<div><h2>'+esc(a.name)+'</h2><p class="ag-muted mono">'+esc(a.slug)+'</p></div>'+
         '<div class="ag-dactions">'+
-          '<a class="btn ghost btn-sm" href="/chat" target="_blank">Open chat</a>'+
+          '<a class="btn ghost btn-sm" href="/agents?agent='+encodeURIComponent(a.slug||a.id)+'">Open chat</a>'+
           '<button class="btn ghost btn-sm" id="delAgent" type="button">Delete</button>'+
         '</div>'+
       '</div>'+
       '<div class="ag-tabs">'+
         ['profile','knowledge','memory','capabilities'].map(function(t){
-          return '<button class="ag-tab'+(t===activeTab?' on':'')+'" data-tab="'+t+'">'+t.charAt(0).toUpperCase()+t.slice(1)+'</button>';
+          var labels={profile:'Profile',knowledge:'Knowledge',memory:'Memory',capabilities:'MCPs'};
+          return '<button class="ag-tab'+(t===activeTab?' on':'')+'" data-tab="'+t+'">'+labels[t]+'</button>';
         }).join('')+
       '</div>'+
       '<div class="ag-tabbody" id="tabBody"></div>';
@@ -216,7 +155,9 @@
 
   function renderKnowledge(a){
     var b=document.getElementById('tabBody');
-    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Documents are chunked and embedded for retrieval (needs an OpenAI key for embeddings).</p><button class="btn primary btn-sm" id="addDoc" type="button">+ Add document</button></div><div id="docList"><p class="ag-muted">Loading...</p></div>';
+    var rag=!!(a.features&&a.features.ragEnabled);
+    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Documents are chunked and embedded for retrieval. Turn RAG on so the agent pulls them into chat (needs an OpenAI key in Admin).</p><div style="display:flex;gap:8px;align-items:center"><button class="btn '+(rag?'primary':'ghost')+' btn-sm" id="ragTgl" type="button">RAG: '+(rag?'On':'Off')+'</button><button class="btn primary btn-sm" id="addDoc" type="button">+ Add document</button></div></div><div id="docList"><p class="ag-muted">Loading...</p></div>';
+    document.getElementById('ragTgl').addEventListener('click',function(){setFeature(a,'ragEnabled',!rag);});
     document.getElementById('addDoc').addEventListener('click',function(){docModal(a);});
     api('GET','/api/agents/'+a.id+'/documents').then(function(j){
       var docs=j.data||[];var dl=document.getElementById('docList');
@@ -235,7 +176,9 @@
 
   function renderMemory(a){
     var b=document.getElementById('tabBody');
-    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Long-term memory documents the agent reads and writes across runs.</p><button class="btn primary btn-sm" id="addMem" type="button">+ Add memory</button></div><div id="memList"><p class="ag-muted">Loading...</p></div>';
+    var mem=!!(a.features&&a.features.memoryEnabled);
+    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Long-term memory documents the agent reads and writes across runs. Turn Memory on so the agent recalls them in chat (needs an OpenAI key in Admin).</p><div style="display:flex;gap:8px;align-items:center"><button class="btn '+(mem?'primary':'ghost')+' btn-sm" id="memTgl" type="button">Memory: '+(mem?'On':'Off')+'</button><button class="btn primary btn-sm" id="addMem" type="button">+ Add memory</button></div></div><div id="memList"><p class="ag-muted">Loading...</p></div>';
+    document.getElementById('memTgl').addEventListener('click',function(){setFeature(a,'memoryEnabled',!mem);});
     document.getElementById('addMem').addEventListener('click',function(){memModal(a,null);});
     api('GET','/api/agents/'+a.id+'/memory').then(function(j){
       var mem=j.data||[];var ml=document.getElementById('memList');
@@ -255,12 +198,14 @@
 
   function renderCapabilities(a){
     var b=document.getElementById('tabBody');
-    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Toggle which platform capabilities this agent can use.</p></div><div id="capList"><p class="ag-muted">Loading...</p></div>';
+    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">HTTP MCP servers registered on the platform. Toggle which ones this agent can use.</p><button class="btn ghost btn-sm" id="goMcp" type="button">+ Register MCP server</button></div><div id="capList"><p class="ag-muted">Loading...</p></div>';
+    var goMcp=document.getElementById('goMcp');
+    if(goMcp)goMcp.addEventListener('click',function(){var t=document.querySelector('.admin-tab[data-tab="mcp"]');if(t)t.click();});
     Promise.all([api('GET','/api/capabilities'),api('GET','/api/agents/'+a.id+'/capabilities')]).then(function(res){
-      var all=res[0].data||[];var mine=res[1].data||[];
+      var all=(res[0].data||[]).filter(function(c){return c.serverUrl;});var mine=res[1].data||[];
       var mineIds={};mine.forEach(function(c){mineIds[c.capabilityId]=true;});
       var cl=document.getElementById('capList');
-      if(!all.length){cl.innerHTML='<p class="ag-muted">No capabilities defined on the platform yet.</p>';return;}
+      if(!all.length){cl.innerHTML='<p class="ag-muted">No MCP servers registered yet. Register one in the <b>MCPs</b> tab (URL + bearer/api key), then toggle it on here.</p>';return;}
       cl.innerHTML='';all.forEach(function(c){
         var on=!!mineIds[c.id];
         var row=document.createElement('div');row.className='ag-row';
@@ -299,15 +244,39 @@
   function docModal(a){
     openModal('<h2>Add document</h2>'+
       field('Name','d_name','')+
+      '<label class="ag-field"><span class="ag-lab">Attach a file (.txt, .md, .csv, .json, .html, .pdf)</span><input type="file" id="d_file" accept=".txt,.md,.csv,.json,.html,.htm,.pdf,text/plain,application/pdf"></label>'+
       field('Content','d_content','',10)+
+      '<p class="ag-muted" style="margin-top:-4px">Attach a file to auto-fill, or paste content directly.</p>'+
       '<p class="ag-error" id="dErr" hidden></p>'+
       '<div class="ag-modalbar"><button class="btn ghost" id="dCancel" type="button">Cancel</button><button class="btn primary" id="dSave" type="button">Add</button></div>');
+    var pdfFile=null;
+    var fileInput=document.getElementById('d_file');
+    fileInput.addEventListener('change',function(){
+      var f=fileInput.files&&fileInput.files[0];if(!f)return;pdfFile=null;
+      var nm=document.getElementById('d_name');if(!nm.value)nm.value=f.name.replace(/\.[^.]+$/,'');
+      var isPdf=/\.pdf$/i.test(f.name)||f.type==='application/pdf';
+      if(isPdf){pdfFile=f;var c=document.getElementById('d_content');c.value='';c.placeholder='PDF will be parsed on the server when you click Add.';return;}
+      var r=new FileReader();r.onload=function(){document.getElementById('d_content').value=String(r.result||'').slice(0,500000);};r.readAsText(f);
+    });
     document.getElementById('dCancel').addEventListener('click',closeModal);
     document.getElementById('dSave').addEventListener('click',function(){
       var err=document.getElementById('dErr');err.hidden=true;
-      var body={name:document.getElementById('d_name').value,content:document.getElementById('d_content').value};
-      if(!body.name||!body.content){err.textContent='Name and content are required.';err.hidden=false;return;}
-      api('POST','/api/agents/'+a.id+'/documents',body).then(function(){closeModal();renderDetail();loadAgents();}).catch(function(e){err.textContent=e.message;err.hidden=false;});
+      var name=document.getElementById('d_name').value;
+      if(!name){err.textContent='Name is required.';err.hidden=false;return;}
+      var btn=document.getElementById('dSave');btn.disabled=true;btn.textContent='Adding...';
+      var done=function(){closeModal();renderDetail();loadAgents();};
+      var fail=function(e){btn.disabled=false;btn.textContent='Add';err.textContent=e.message;err.hidden=false;};
+      if(pdfFile){
+        var fd=new FormData();fd.append('name',name);fd.append('file',pdfFile);
+        var hdrs={};if(token)hdrs['X-Admin-Key']=token;
+        fetch('/api/agents/'+a.id+'/documents/upload',{method:'POST',headers:hdrs,body:fd})
+          .then(function(r){if(r.status===401){expired();throw new Error('Session expired.');}return r.json();})
+          .then(function(j){if(!j.ok)throw new Error(j.error||'Upload failed');done();}).catch(fail);
+      } else {
+        var content=document.getElementById('d_content').value;
+        if(!content){fail(new Error('Attach a file or enter content.'));return;}
+        api('POST','/api/agents/'+a.id+'/documents',{name:name,content:content}).then(done).catch(fail);
+      }
     });
   }
 
@@ -330,16 +299,7 @@
     });
   }
 
-  // ── Boot ──
-  try{token=localStorage.getItem(TOKEN_KEY);}catch(e){}
-  if(token){
-    // Validate token by hitting an admin-only endpoint.
-    fetch('/api/capabilities',{headers:{'X-Admin-Key':token}}).then(function(r){
-      if(r.status===401){signOut();}else{signedIn();}
-    }).catch(function(){signOut();});
-  }else{gate.hidden=false;}
+  // Admin calls this when the Agent Management tab opens / after login.
+  window.AgentManager={open:function(){token=readToken();loadAgents();}};
 })();
 </script>
-<script src="/js/theme.js"></script>
-</body>
-</html>

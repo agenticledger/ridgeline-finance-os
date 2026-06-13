@@ -224,14 +224,10 @@ app.use('/api/llm-config', llmConfigRouter);
 app.use('/api/settings', settingsRouter);
 
 // ─── Chat page (SSR) ──────────────────────────────────────────────
+// Chat now lives at /agents — keep /chat as a redirect so old links work.
 app.get('/chat', (req, res) => {
-  res.render('chat', {
-    ...siteData,
-    pageTitle: 'Chat with Orphil — AI Assistant',
-    pageDescription: 'Chat with Orphil, our AI assistant that knows our firm and can help with questions about AI transformation for finance and accounting.',
-    canonicalUrl: '/chat',
-    pageType: 'WebPage'
-  });
+  const agent = req.query.agent ? '?agent=' + encodeURIComponent(req.query.agent) : '';
+  res.redirect('/agents' + agent);
 });
 
 // ─── Admin panel (SSR) ────────────────────────────────────────────

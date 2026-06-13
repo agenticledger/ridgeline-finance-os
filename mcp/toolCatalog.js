@@ -187,7 +187,7 @@ const TOOL_GROUPS = [
       {
         name: 'process_list_tools', group: 'config', title: 'List the tool registry', sideEffect: 'none',
         mapsTo: 'GET /api/fos/tools',
-        description: 'List the global tool registry (skills, agents, prompts, integrations). Returns tool ids needed for process_map_tool.',
+        description: 'List the global tool registry (automations, skills, agents, prompts, MCP servers). Returns tool ids needed for process_map_tool.',
         args: [],
       },
       {

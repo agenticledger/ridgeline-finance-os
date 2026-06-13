@@ -1,10 +1,13 @@
 const { Router } = require('express');
+const multer = require('multer');
+const { PDFParse } = require('pdf-parse');
 const prisma = require('../services/db');
 const { requireAdmin } = require('../middleware/adminAuth');
 const { ingestDocument, searchSimilar } = require('../services/ragService');
 const { decrypt } = require('../services/encryption');
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 async function getOpenAIKey() {
   const stored = await prisma.llmApiKey.findUnique({ where: { provider: 'openai' } });
@@ -81,6 +84,59 @@ router.post('/:agentId/documents', requireAdmin, async (req, res, next) => {
         ingested,
         createdAt: document.createdAt,
       },
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/agents/:agentId/documents/upload — attach a file (.pdf parsed server-side; text files sent as-is)
+router.post('/:agentId/documents/upload', requireAdmin, upload.single('file'), async (req, res, next) => {
+  try {
+    const agentId = req.params.agentId;
+    if (!req.file) return res.status(400).json({ ok: false, error: 'file is required' });
+
+    const fname = req.file.originalname || '';
+    const name = (req.body.name || fname).trim();
+    if (!name) return res.status(400).json({ ok: false, error: 'name is required' });
+
+    const agent = await prisma.agent.findUnique({ where: { id: agentId } });
+    if (!agent) return res.status(404).json({ ok: false, error: 'Agent not found' });
+
+    const isPdf = /\.pdf$/i.test(fname) || req.file.mimetype === 'application/pdf';
+    let content;
+    let sourceType;
+    if (isPdf) {
+      const parser = new PDFParse({ data: req.file.buffer });
+      try {
+        const parsed = await parser.getText();
+        content = (parsed.text || '').trim();
+      } finally {
+        await parser.destroy();
+      }
+      sourceType = 'pdf';
+    } else {
+      content = req.file.buffer.toString('utf-8').trim();
+      sourceType = 'file';
+    }
+    if (!content) return res.status(400).json({ ok: false, error: 'No extractable text found in the file' });
+
+    const document = await prisma.kBDocument.create({
+      data: { agentId, name, content, sourceType, metadata: { filename: fname } },
+    });
+
+    let ingested = false;
+    try {
+      const apiKey = await getOpenAIKey();
+      if (apiKey) {
+        await ingestDocument(document.id, agentId, content, apiKey);
+        ingested = true;
+      }
+    } catch (err) {
+      console.error('Document ingestion failed:', err.message || err);
+    }
+
+    res.status(201).json({
+      ok: true,
+      data: { id: document.id, name: document.name, sourceType, ingested, createdAt: document.createdAt },
     });
   } catch (err) { next(err); }
 });

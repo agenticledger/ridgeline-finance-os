@@ -48,10 +48,10 @@ function curlFor(e, baseUrl) {
 
 const TOOL_TYPE_META = {
   automation: { label: 'Automation', blurb: 'A deterministic code engine that executes a step\u2019s logic.' },
-  skill: { label: 'Skill', blurb: 'A deterministic capability invoked by a step.' },
+  skill: { label: 'Skill', blurb: 'A reusable deterministic capability invoked by a step.' },
   agent: { label: 'Agent', blurb: 'An autonomous worker that owns or improves a process.' },
   prompt: { label: 'Prompt', blurb: 'A reusable prompt template invoked by a step or agent.' },
-  mcp: { label: 'Integration', blurb: 'A system connector exposed over MCP.' },
+  mcp: { label: 'MCP', blurb: 'A system connector exposed over MCP.' },
 };
 
 const router = express.Router();
@@ -205,10 +205,10 @@ router.post('/api/automator/apply', async (req, res) => {
 router.get('/agents', async (req, res, next) => {
   try {
     const processes = await listProcesses().catch(() => []);
-    res.render('agents', {
+    res.render('chat', {
       org: processes[0] ? processes[0].org : 'Ridgeline Foods, Inc.',
       pageTitle: 'Ridgeline Finance OS — Agents',
-      pageDescription: 'Manage the agents that own and improve finance processes: instructions, knowledge, memory, and capabilities.',
+      pageDescription: 'Chat with the agents that own and improve finance processes — switch agents, ask about live process state, and trigger or sign off steps.',
     });
   } catch (e) { next(e); }
 });
@@ -445,21 +445,39 @@ router.get('/processes/live/:slug', async (req, res, next) => {
 // Tools Registry — platform-wide inventory of skills, agents, prompts, and MCP servers.
 router.get('/registry', async (req, res, next) => {
   try {
+    // Non-agent tools come from the shared tool registry.
     const rows = await prisma.tool.findMany({
+      where: { type: { not: 'agent' } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
       include: { _count: { select: { processTools: true, steps: true } } },
     });
-    const tools = rows.map((t) => ({
+    const toolCards = rows.map((t) => ({
       slug: t.slug, name: t.name, type: t.type,
       typeLabel: (TOOL_TYPE_META[t.type] || {}).label || t.type,
       description: t.description,
       processCount: t._count.processTools, stepCount: t._count.steps,
+      href: `/registry/${t.slug}`,
     }));
+    // Agents come live from the real Agent table so the registry always matches
+    // Admin → Agent Management. One source of truth — no placeholder duplicates.
+    const agents = await prisma.agent.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { ownedProcesses: true } } },
+    });
+    const agentCards = agents.map((a) => ({
+      slug: a.slug, name: a.name, type: 'agent',
+      typeLabel: TOOL_TYPE_META.agent.label,
+      description: a.description,
+      processCount: a._count.ownedProcesses, stepCount: 0,
+      href: `/agents?agent=${encodeURIComponent(a.slug)}`,
+    }));
+    const tools = [...agentCards, ...toolCards];
     res.render('registry', {
       tools,
       typeMeta: TOOL_TYPE_META,
       pageTitle: 'Ridgeline Finance OS — Tools Registry',
-      pageDescription: 'Platform-wide inventory of skills, agents, humans, and integrations.',
+      pageDescription: 'Platform-wide inventory of automations, skills, agents, prompts, and MCP servers.',
     });
   } catch (e) { next(e); }
 });

@@ -1,5 +1,21 @@
-<%- include('partials/head') %>
-<%- include('partials/nav') %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+
+<%- include('partials/topbar', { active: 'admin' }) %>
 
 <main class="admin-page" id="adminApp">
   <!-- Login Screen -->
@@ -17,51 +33,24 @@
   <!-- Admin Dashboard (hidden until login) -->
   <div class="admin-container" id="dashboardScreen" style="display:none">
     <h1>Agent Platform</h1>
-    <p>Manage agents, knowledge base, LLM providers, and platform settings.</p>
+    <p>Manage agents, knowledge, LLM providers, and platform settings.</p>
 
     <div class="admin-tabs">
-      <button class="admin-tab active" data-tab="agents">Agents</button>
-      <button class="admin-tab" data-tab="kb">Knowledge Base</button>
-      <button class="admin-tab" data-tab="mcp">MCP Servers</button>
+      <button class="admin-tab active" data-tab="agentmgmt">Agent Management</button>
+      <button class="admin-tab" data-tab="mcp">MCPs</button>
       <button class="admin-tab" data-tab="llm">LLM Config</button>
       <button class="admin-tab" data-tab="settings">Settings</button>
     </div>
 
-    <!-- Agents Tab -->
-    <div class="tab-panel active" id="tab-agents">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h3 style="margin:0;color:var(--text-primary)">Agents</h3>
-        <button class="btn-sm" id="btnCreateAgent">+ New Agent</button>
-      </div>
-      <div id="agentList"><p class="empty-state">Loading...</p></div>
-    </div>
-
-    <!-- Knowledge Base Tab -->
-    <div class="tab-panel" id="tab-kb">
-      <div class="admin-card">
-        <h3>Knowledge Base</h3>
-        <p class="card-desc">Add documents to give the AI agent knowledge about your firm, services, and content. Documents are chunked and searched at query time (RAG). Embeddings require an OpenAI API key.</p>
-        <div class="form-group">
-          <label for="kbAgentSelect">Select Agent</label>
-          <select id="kbAgentSelect">
-            <option value="">Select an agent to manage its documents...</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="kbDocPanel" style="display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h3 style="margin:0;color:var(--text-primary)">Documents</h3>
-          <button class="btn-sm" id="btnAddDoc">+ Add Document</button>
-        </div>
-        <div id="docList"><p class="empty-state">Loading...</p></div>
-      </div>
+    <!-- Agent Management Tab — per-agent editor (Profile / Knowledge / Memory / MCPs) -->
+    <div class="tab-panel active" id="tab-agentmgmt">
+      <%- include('partials/agentManager') %>
     </div>
 
     <!-- MCP Servers Tab -->
     <div class="tab-panel" id="tab-mcp">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <h3 style="margin:0;color:var(--text-primary)">MCP Servers</h3>
+        <h3 style="margin:0;color:var(--text-primary)">MCPs</h3>
         <button class="btn-sm" id="btnAddMcp">+ Add Server</button>
       </div>
       <p style="font-size:13px;color:var(--text-secondary);margin:0 0 20px">External MCP servers provide tools to your agents. Add a server URL, test it, then connect it to one or more agents.</p>
@@ -86,7 +75,7 @@
 
       <div class="admin-card">
         <h3>API Keys</h3>
-        <p class="card-desc">Configure API keys for each provider. Keys are encrypted at rest.</p>
+        <p class="card-desc">Configure API keys for each provider. Keys are encrypted at rest. The <strong>OpenAI</strong> key also powers document embeddings (RAG) and memory recall.</p>
         <div id="apiKeyList"></div>
       </div>
     </div>
@@ -97,36 +86,6 @@
         <h3>Platform Settings</h3>
         <p class="card-desc">Additional API keys and configuration.</p>
         <div id="settingsList"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Agent Modal -->
-  <div class="modal-overlay hidden" id="agentModal">
-    <div class="modal">
-      <h3 id="agentModalTitle">Create Agent</h3>
-      <input type="hidden" id="agentEditId">
-      <div class="form-group">
-        <label for="agentName">Name</label>
-        <input type="text" id="agentNameInput" placeholder="e.g. Orphil Advisory">
-      </div>
-      <div class="form-group">
-        <label for="agentDesc">Description</label>
-        <input type="text" id="agentDescInput" placeholder="Short description">
-      </div>
-      <div class="form-group">
-        <label for="agentInstructions">System Instructions</label>
-        <textarea id="agentInstructionsInput" rows="6" placeholder="You are..."></textarea>
-      </div>
-      <div class="form-group">
-        <label for="agentModelInput">Default Model (optional)</label>
-        <select id="agentModelInput">
-          <option value="">Use platform default</option>
-        </select>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-secondary" id="btnCancelAgent">Cancel</button>
-        <button class="btn-primary" id="btnSaveAgent">Save</button>
       </div>
     </div>
   </div>
@@ -157,28 +116,10 @@
     </div>
   </div>
 
-  <!-- Document Modal -->
-  <div class="modal-overlay hidden" id="docModal">
-    <div class="modal">
-      <h3>Add Document</h3>
-      <div class="form-group">
-        <label for="docNameInput">Document Name</label>
-        <input type="text" id="docNameInput" placeholder="e.g. Services Overview, About Ore Phillips">
-      </div>
-      <div class="form-group">
-        <label for="docContentInput">Content</label>
-        <textarea id="docContentInput" rows="12" placeholder="Paste document content here — this becomes the agent's knowledge..."></textarea>
-      </div>
-      <p style="font-size:12px;color:var(--text-tertiary);margin-top:-4px">If an OpenAI API key is configured, the document will be automatically embedded for semantic search.</p>
-      <div class="modal-actions">
-        <button class="btn-secondary" id="btnCancelDoc">Cancel</button>
-        <button class="btn-primary" id="btnSaveDoc">Save Document</button>
-      </div>
-    </div>
-  </div>
 </main>
 
-<link rel="stylesheet" href="/css/admin.css">
+<link rel="stylesheet" href="/css/admin.css?v=2">
 <script src="/js/admin.js"></script>
-
-<%- include('partials/footer') %>
+<script src="/js/theme.js"></script>
+</body>
+</html>
