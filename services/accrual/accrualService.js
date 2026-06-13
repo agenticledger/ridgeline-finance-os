@@ -34,7 +34,7 @@ function deniseEstimate(denise, period) {
   return out;
 }
 
-function runAccrual({ period = 'April 2026', materialityThreshold = 1500, maxCv = 0.15 } = {}) {
+function runAccrual({ period = 'April 2026', materialityThreshold = 1500, maxCv = 0.15, bandZ = 1.645, mixShiftZ = 1 } = {}) {
   // ── Ingest ─────────────────────────────────────────────────────────
   const { shipments, dataQuality } = ingestShipments('shipments_apr2026.csv', period);
   const invoices = ingestInvoices();
@@ -50,7 +50,7 @@ function runAccrual({ period = 'April 2026', materialityThreshold = 1500, maxCv 
   const baselines = trailingBaselines(reconByCarrier);
 
   // ── Estimate (regime-aware ensemble + 90% band + gate) ─────────────
-  const est = estimateAccrual(accrual, calibration, { materialityThreshold, maxCv, baselines });
+  const est = estimateAccrual(accrual, calibration, { materialityThreshold, maxCv, baselines, bandZ, mixShiftZ });
 
   // ── Assemble per-carrier view rows ─────────────────────────────────
   const denise3 = deniseEstimate(denise, period);

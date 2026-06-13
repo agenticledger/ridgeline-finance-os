@@ -96,11 +96,20 @@ async function closedMarchLoop() {
   await resetState();
   console.log('Reset: runs, reconciliations, proposals, versions cleared; policies reset to v1.\n');
 
+  // Order matters now that estimation params flow from policy into the engine.
+  // April is booked FIRST, while every policy is still at v1 (default params), so it
+  // reproduces the canonical $103,402.27. The March loop then APPLIES a proposal that
+  // tunes a policy param — affecting future runs only, never the already-pinned April
+  // run. Finally we touch April's createdAt so it still sorts newest (the "needs you"
+  // hero the command center and supervisor key off).
   console.log('Live period:');
   const aprilId = await liveAprilRun();
 
   console.log('\nClosed loop (replayed prior period):');
   const marchId = await closedMarchLoop();
+
+  await prisma.accrualRun.update({ where: { id: aprilId }, data: { createdAt: new Date() } });
+  console.log('\nApril run re-stamped as newest (live period on top).');
 
   const counts = {
     runs: await prisma.accrualRun.count(),

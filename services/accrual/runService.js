@@ -144,9 +144,12 @@ async function executeRun({ period = 'April 2026', mode = 'manual', actor = 'Acc
   // Read tunable params from policies (plan G1: params = Policy)
   const materialityThreshold = param(policyByKey, 'materiality_gate', 'materialityThreshold', 1500);
   const maxCv = param(policyByKey, 'materiality_gate', 'maxCv', 0.15);
+  // Estimation methodology params (the Improve plane's primary tuning target).
+  const bandZ = param(policyByKey, 'estimation_method', 'bandZ', 1.645);
+  const mixShiftZ = param(policyByKey, 'estimation_method', 'mixShiftZ', 1);
 
   // Run the validated deterministic engine
-  const result = runAccrual({ period, materialityThreshold, maxCv });
+  const result = runAccrual({ period, materialityThreshold, maxCv, bandZ, mixShiftZ });
 
   const dispositions = result.control.dispositions;
   const escalate = dispositions.escalate > 0;
@@ -178,6 +181,8 @@ async function executeRun({ period = 'April 2026', mode = 'manual', actor = 'Acc
         dispositions,
         materialityThreshold,
         maxCv,
+        bandZ,
+        mixShiftZ,
         carriers: result.carriers,
         je: result.je,
         calibration: result.calibration,

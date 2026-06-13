@@ -104,6 +104,18 @@ function approx(a, b, eps = 0.01) { return Math.abs(a - b) <= eps; }
     check('live policy version matches audit row', pol && pol.version === v.version, pol && `policy v${pol.version}`);
   }
 
+  // ── 7b. The applied param is non-cosmetic: it actually moves the engine ────
+  const baseRun = runAccrual({ period: 'April 2026', mixShiftZ: 1.0, bandZ: 1.645 });
+  const tunedMix = runAccrual({ period: 'April 2026', mixShiftZ: 0.8, bandZ: 1.645 });
+  const tunedBand = runAccrual({ period: 'April 2026', mixShiftZ: 1.0, bandZ: 1.96 });
+  check('tuning mixShiftZ changes the booked estimate (param is wired, not cosmetic)',
+    !approx(baseRun.portfolio.point, tunedMix.portfolio.point),
+    `${baseRun.portfolio.point} -> ${tunedMix.portfolio.point}`);
+  const baseWidth = baseRun.portfolio.high - baseRun.portfolio.low;
+  const wideWidth = tunedBand.portfolio.high - tunedBand.portfolio.low;
+  check('raising bandZ widens the confidence band (param is wired)', wideWidth > baseWidth,
+    `${round2(baseWidth)} -> ${round2(wideWidth)}`);
+
   // ── 8. Doc catalogs internally consistent (no duplicate operation ids) ─────
   const ops = API_GROUPS.flatMap((g) => g.endpoints.map((e) => e.op));
   check('REST op ids are unique', new Set(ops).size === ops.length, `${ops.length} endpoints`);

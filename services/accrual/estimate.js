@@ -17,12 +17,12 @@ const Z_90 = 1.645; // 90% two-sided interval
 // uses the month-to-month factor volatility (cal.spread) directly — this is the real
 // uncertainty in the booked monthly number. (A small floor avoids an over-tight band
 // when only a couple of months of history exist.)
-function estimateCarrier(contractual, cal) {
+function estimateCarrier(contractual, cal, bandZ = Z_90) {
   const factor = cal && cal.factor ? cal.factor : 1;
   const spread = Math.max(cal && cal.spread != null ? cal.spread : 0.12, 0.04);
   const months = cal && cal.months ? cal.months : 0;
   const point = round2(contractual * factor);
-  const halfBand = round2(Z_90 * spread * contractual);
+  const halfBand = round2(bandZ * spread * contractual);
   return {
     contractual: round2(contractual),
     factor,
@@ -66,20 +66,20 @@ function engineWeight(factorSpread, actualVolatility) {
 // historical contractual range, the deviation is a real volume/mix change (new lanes,
 // heavier freight) that the engine has correctly priced — NOT rate noise to dampen.
 // Returns a 0..0.9 strength that pulls the blend back toward the engine.
-function mixShiftStrength(contractual, cal) {
+function mixShiftStrength(contractual, cal, mixShiftZ = 1) {
   if (!cal || !cal.contractualSd) return 0;
   const z = Math.abs((contractual - cal.contractualMean) / cal.contractualSd);
-  return Math.max(0, Math.min(0.9, (z - 1) / 2)); // z<=1 normal; z>=2.8 ⇒ ~0.9
+  return Math.max(0, Math.min(0.9, (z - mixShiftZ) / 2)); // z<=mixShiftZ normal; further out ⇒ trust the engine
 }
 
 // Blend the engine point estimate with a trailing baseline (Denise-style anchor).
 // The blend dampens exogenous RATE drift (which mean-reverts) but must not erase a
 // genuine volume/mix shift — so the engine weight is the inverse-variance weight
 // lifted by any detected mix shift. The confidence band travels with the estimate.
-function blend(est, baseline, cal) {
+function blend(est, baseline, cal, mixShiftZ = 1) {
   if (!baseline || baseline.trailing == null) return { ...est, blended: est.point, engineWeight: 1 };
   const wInvVar = engineWeight(est.spread, baseline.volatility);
-  const mix = mixShiftStrength(est.contractual, cal);
+  const mix = mixShiftStrength(est.contractual, cal, mixShiftZ);
   const w = Math.max(wInvVar, mix);
   const blended = round2(w * est.point + (1 - w) * baseline.trailing);
   const shift = round2(blended - est.point);
@@ -98,13 +98,13 @@ function blend(est, baseline, cal) {
 // Apply calibration across a full deterministic accrual result (from compute.js).
 // baselines (optional): { peak: { trailing, volatility }, ... } enables the ensemble.
 function estimateAccrual(accrual, calibration, opts = {}) {
-  const { baselines = {} } = opts;
+  const { baselines = {}, bandZ = Z_90, mixShiftZ = 1 } = opts;
   const carriers = {};
   let point = 0; let low = 0; let high = 0;
   for (const c of ['peak', 'heartland', 'coastal']) {
     const sub = accrual.byCarrier[c];
-    let est = estimateCarrier(sub ? sub.total : 0, calibration[c]);
-    est = blend(est, baselines[c], calibration[c]);
+    let est = estimateCarrier(sub ? sub.total : 0, calibration[c], bandZ);
+    est = blend(est, baselines[c], calibration[c], mixShiftZ);
     est.point = est.blended; // booked number = ensemble estimate
     est.decision = gate(est, opts);
     carriers[c] = est;
