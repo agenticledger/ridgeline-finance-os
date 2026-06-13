@@ -144,6 +144,48 @@ const API_GROUPS = [
   },
 
   {
+    name: 'Process Owner Agent & Supervision',
+    base: '/api/fos',
+    blurb: 'Every process is owned by exactly one Process Owner Agent — a supervisor that observes live run state, explains it, and can trigger or sign off steps on a human\u2019s instruction. It is NOT in the critical path: the deterministic engine still does the math. A scheduler (or an external cron) drives proactive supervision: auto-run a period when due and nudge a run that has been stuck awaiting a human. Owner agents are auto-provisioned when a process is created and can be (re)provisioned or backfilled here.',
+    endpoints: [
+      {
+        op: 'fos_get_process_agent', method: 'GET', path: '/api/fos/process/:slug/agent', auth: 'none',
+        summary: 'Get the Process Owner Agent for a process (so the UI can open a chat with it).',
+        params: [{ in: 'path', name: 'slug', type: 'string', required: true, desc: 'Process slug.' }],
+        body: [],
+        returns: 'Owner agent { id, name, slug, description, defaultModel, features } or null if none provisioned.',
+      },
+      {
+        op: 'fos_provision_process_agent', method: 'POST', path: '/api/fos/process/:slug/agent/provision', auth: 'none',
+        summary: '(Re)provision a process\u2019s owner agent, regenerating its supervisor system prompt from the current process definition. Idempotent by agent slug.',
+        params: [{ in: 'path', name: 'slug', type: 'string', required: true, desc: 'Process slug.' }],
+        body: [],
+        returns: 'The provisioned owner agent { id, slug, name }.',
+      },
+      {
+        op: 'fos_backfill_agents', method: 'POST', path: '/api/fos/agents/backfill', auth: 'none',
+        summary: 'Provision or refresh owner agents across all processes (used on boot). With refresh:true, regenerates every agent\u2019s prompt.',
+        params: [],
+        body: [{ name: 'refresh', type: 'boolean', required: false, desc: 'If true, regenerate the system prompt for existing agents too.' }],
+        returns: 'Summary of provisioned/refreshed agents.',
+      },
+      {
+        op: 'fos_supervisor_tick', method: 'POST', path: '/api/fos/supervisor/:slug/tick', auth: 'none',
+        summary: 'Run one proactive supervision tick for a process: auto-run the target period if due (mode=auto, engine-bound, no run yet) and nudge a run stuck awaiting a human (throttled). Deterministic and idempotent-by-period.',
+        params: [{ in: 'path', name: 'slug', type: 'string', required: true, desc: 'Process slug.' }],
+        body: [],
+        returns: '{ slug, actions[], latest } describing what the tick did.',
+      },
+      {
+        op: 'fos_supervisor_tick_all', method: 'POST', path: '/api/fos/supervisor/tick', auth: 'none',
+        summary: 'Run a supervision tick for every active process (the scheduler entry point, also callable by an external cron).',
+        params: [], body: [],
+        returns: 'Array of per-process tick results.',
+      },
+    ],
+  },
+
+  {
     name: 'Process Configuration',
     base: '/api/fos',
     blurb: 'The construct-a-process surface. Everything a human can do on the Setup page is here as JSON, so an agent (or the process automator) can define a process end to end: create it, edit its definition, add/edit/remove steps and policies, bind tools, and set the improvement trigger. Backed by services/accrual/configService.js — the exact code path the UI forms use.',
