@@ -1,0 +1,184 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<main class="admin-page" id="adminApp">
+  <!-- Login Screen -->
+  <div class="admin-login" id="loginScreen">
+    <h2>Admin Panel</h2>
+    <p>Sign in to manage the Orphil agent platform.</p>
+    <div class="form-group">
+      <label for="adminPassword">Password</label>
+      <input type="password" id="adminPassword" placeholder="Enter admin password" autocomplete="current-password">
+    </div>
+    <p class="form-error" id="loginError" style="display:none"></p>
+    <button class="btn-primary" id="btnLogin">Sign In</button>
+  </div>
+
+  <!-- Admin Dashboard (hidden until login) -->
+  <div class="admin-container" id="dashboardScreen" style="display:none">
+    <h1>Agent Platform</h1>
+    <p>Manage agents, knowledge base, LLM providers, and platform settings.</p>
+
+    <div class="admin-tabs">
+      <button class="admin-tab active" data-tab="agents">Agents</button>
+      <button class="admin-tab" data-tab="kb">Knowledge Base</button>
+      <button class="admin-tab" data-tab="mcp">MCP Servers</button>
+      <button class="admin-tab" data-tab="llm">LLM Config</button>
+      <button class="admin-tab" data-tab="settings">Settings</button>
+    </div>
+
+    <!-- Agents Tab -->
+    <div class="tab-panel active" id="tab-agents">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0;color:var(--text-primary)">Agents</h3>
+        <button class="btn-sm" id="btnCreateAgent">+ New Agent</button>
+      </div>
+      <div id="agentList"><p class="empty-state">Loading...</p></div>
+    </div>
+
+    <!-- Knowledge Base Tab -->
+    <div class="tab-panel" id="tab-kb">
+      <div class="admin-card">
+        <h3>Knowledge Base</h3>
+        <p class="card-desc">Add documents to give the AI agent knowledge about your firm, services, and content. Documents are chunked and searched at query time (RAG). Embeddings require an OpenAI API key.</p>
+        <div class="form-group">
+          <label for="kbAgentSelect">Select Agent</label>
+          <select id="kbAgentSelect">
+            <option value="">Select an agent to manage its documents...</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="kbDocPanel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="margin:0;color:var(--text-primary)">Documents</h3>
+          <button class="btn-sm" id="btnAddDoc">+ Add Document</button>
+        </div>
+        <div id="docList"><p class="empty-state">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- MCP Servers Tab -->
+    <div class="tab-panel" id="tab-mcp">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0;color:var(--text-primary)">MCP Servers</h3>
+        <button class="btn-sm" id="btnAddMcp">+ Add Server</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 20px">External MCP servers provide tools to your agents. Add a server URL, test it, then connect it to one or more agents.</p>
+      <div id="mcpList"><p class="empty-state">Loading...</p></div>
+    </div>
+
+    <!-- LLM Config Tab -->
+    <div class="tab-panel" id="tab-llm">
+      <div class="admin-card">
+        <h3>Active Model</h3>
+        <p class="card-desc">Select the LLM provider and model used for agent responses.</p>
+        <div class="form-group">
+          <label for="llmProvider">Provider</label>
+          <select id="llmProvider"></select>
+        </div>
+        <div class="form-group">
+          <label for="llmModel">Model</label>
+          <select id="llmModel"></select>
+        </div>
+        <button class="btn-primary" id="btnSaveLlm" style="width:auto">Save Model</button>
+      </div>
+
+      <div class="admin-card">
+        <h3>API Keys</h3>
+        <p class="card-desc">Configure API keys for each provider. Keys are encrypted at rest.</p>
+        <div id="apiKeyList"></div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-panel" id="tab-settings">
+      <div class="admin-card">
+        <h3>Platform Settings</h3>
+        <p class="card-desc">Additional API keys and configuration.</p>
+        <div id="settingsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Modal -->
+  <div class="modal-overlay hidden" id="agentModal">
+    <div class="modal">
+      <h3 id="agentModalTitle">Create Agent</h3>
+      <input type="hidden" id="agentEditId">
+      <div class="form-group">
+        <label for="agentName">Name</label>
+        <input type="text" id="agentNameInput" placeholder="e.g. Orphil Advisory">
+      </div>
+      <div class="form-group">
+        <label for="agentDesc">Description</label>
+        <input type="text" id="agentDescInput" placeholder="Short description">
+      </div>
+      <div class="form-group">
+        <label for="agentInstructions">System Instructions</label>
+        <textarea id="agentInstructionsInput" rows="6" placeholder="You are..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="agentModelInput">Default Model (optional)</label>
+        <select id="agentModelInput">
+          <option value="">Use platform default</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnCancelAgent">Cancel</button>
+        <button class="btn-primary" id="btnSaveAgent">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP Server Modal -->
+  <div class="modal-overlay hidden" id="mcpModal">
+    <div class="modal">
+      <h3 id="mcpModalTitle">Add MCP Server</h3>
+      <input type="hidden" id="mcpEditId">
+      <div class="form-group">
+        <label>Server Name</label>
+        <input type="text" id="mcpNameInput" placeholder="e.g. Finney Finance Tools">
+      </div>
+      <div class="form-group">
+        <label>Server URL</label>
+        <input type="text" id="mcpUrlInput" placeholder="https://example.com/mcp">
+      </div>
+      <div class="form-group">
+        <label>Bearer Token <span style="font-weight:400;color:var(--text-tertiary)">(optional)</span></label>
+        <input type="password" id="mcpTokenInput" placeholder="Auth token if required by the server">
+      </div>
+      <div id="mcpTestResult" style="display:none;margin-top:4px;padding:10px 12px;background:var(--bg-elevated);border-radius:var(--radius-sm);font-size:12px;line-height:1.5"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnCancelMcp">Cancel</button>
+        <button class="btn-secondary" id="btnTestMcpModal">Test Connection</button>
+        <button class="btn-primary" id="btnSaveMcp">Save Server</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Document Modal -->
+  <div class="modal-overlay hidden" id="docModal">
+    <div class="modal">
+      <h3>Add Document</h3>
+      <div class="form-group">
+        <label for="docNameInput">Document Name</label>
+        <input type="text" id="docNameInput" placeholder="e.g. Services Overview, About Ore Phillips">
+      </div>
+      <div class="form-group">
+        <label for="docContentInput">Content</label>
+        <textarea id="docContentInput" rows="12" placeholder="Paste document content here — this becomes the agent's knowledge..."></textarea>
+      </div>
+      <p style="font-size:12px;color:var(--text-tertiary);margin-top:-4px">If an OpenAI API key is configured, the document will be automatically embedded for semantic search.</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btnCancelDoc">Cancel</button>
+        <button class="btn-primary" id="btnSaveDoc">Save Document</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<link rel="stylesheet" href="/css/admin.css">
+<script src="/js/admin.js"></script>
+
+<%- include('partials/footer') %>

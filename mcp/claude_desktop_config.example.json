@@ -1,0 +1,13 @@
+{
+  "_comment": "Ridgeline Finance OS MCP server. Copy this block into your MCP client config (Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json). Update the cwd path and DATABASE_URL to match your machine, then restart the client. The stateful tools (run/sign-off/freeze/policies) need DATABASE_URL; the deterministic tools (estimate, price) run from the data files with no DB.",
+  "mcpServers": {
+    "ridgeline-finance-os": {
+      "command": "node",
+      "args": ["mcp/server.js"],
+      "cwd": "/Users/oreph/Desktop/APPs/ridgeline-finance-os",
+      "env": {
+        "DATABASE_URL": "postgresql://oreph@localhost:5432/ridgeline"
+      }
+    }
+  }
+}

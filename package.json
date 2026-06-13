@@ -1,0 +1,35 @@
+{
+  "name": "ridgeline-finance-os",
+  "version": "1.0.0",
+  "description": "Ridgeline Finance OS — agentic finance & accounting command center. First loop: freight accrual estimation.",
+  "main": "server.js",
+  "scripts": {
+    "build": "prisma generate",
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "mcp": "node mcp/server.js",
+    "seed": "node prisma/seed.js",
+    "seed:demo": "node scripts/seed-demo.js",
+    "validate": "node scripts/validate.js",
+    "run-accrual": "node scripts/run-once.js",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.24.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@prisma/client": "^6.8.0",
+    "compression": "^1.7.5",
+    "csv-parse": "^5.6.0",
+    "ejs": "^3.1.10",
+    "express": "^4.21.1",
+    "helmet": "^8.0.0",
+    "openai": "^4.85.0",
+    "prisma": "^6.8.0",
+    "resend": "^6.12.3",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

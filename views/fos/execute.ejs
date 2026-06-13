@@ -1,0 +1,51 @@
+<!-- Execute — the agent's surface. Live work, step by step. Data -> Processing -> Outcome. -->
+<%
+  function render(v){
+    if(v==null) return '<span style="color:var(--muted)">--</span>';
+    if(typeof v==='number') return fmt2 && Number.isFinite(v) ? (Math.abs(v)>=100?fmt0(v):v.toLocaleString('en-US')) : String(v);
+    if(typeof v!=='object') return String(v);
+    if(Array.isArray(v)) return v.length ? v.map(x=> typeof x==='object'? JSON.stringify(x):String(x)).join('<br>') : '<span style="color:var(--muted)">none</span>';
+    return Object.entries(v).map(([k,val])=>{
+      let disp = (val!==null&&typeof val==='object') ? JSON.stringify(val) : String(val);
+      return '<b>'+k+'</b>: '+disp;
+    }).join('<br>');
+  }
+  const steps = run.steps || [];
+  const decLabel = {policy_based:'Policy',judgment_based:'Judgment',mixed:'Mixed'};
+%>
+
+<section class="card">
+  <div class="card-h">
+    <h3>Run execution &mdash; <%= run.period %></h3>
+    <span class="sub"><%= steps.filter(s=>s.status==='done').length %>/<%= steps.length %> steps complete &middot; <%= run.status.replace(/_/g,' ') %></span>
+  </div>
+  <div class="steps">
+    <% steps.forEach(function(st){ %>
+      <% if(st.key==='post_je' && st.status==='awaiting_human'){ %>
+        <div class="pausebar">&#9208; Paused before posting &mdash; the materiality gate escalated. Waiting for overseer sign-off on the Monitor tab.</div>
+      <% } %>
+      <details class="step <%= st.status %>" <%= st.status==='awaiting_human'?'open':'' %>>
+        <summary>
+          <span class="ord"><%= st.order %></span>
+          <div>
+            <div class="sname"><%= st.name %></div>
+            <div class="ssrc"><%= st.key %></div>
+          </div>
+          <div class="sgrow"></div>
+          <span class="chip <%= st.decisionType %>"><%= decLabel[st.decisionType] %></span>
+          <span class="chip <%= st.status %>"><%= st.status.replace(/_/g,' ') %></span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </summary>
+        <div class="detail">
+          <div class="dblock"><div class="dh"><span class="tg">IN</span>Data in</div><div class="kv"><%- render(st.input) %></div></div>
+          <div class="dblock"><div class="dh"><span class="tg">D&rarr;A</span>Processing</div><div class="kv"><%- render(st.processing) %><% if((st.policiesApplied||[]).length){ %><br><span style="color:var(--muted)">policies:</span> <%= st.policiesApplied.join(', ') %><% } %></div></div>
+          <div class="dblock"><div class="dh"><span class="tg">OUT</span>Outcome</div><div class="kv"><%- render(st.outcome) %></div></div>
+        </div>
+      </details>
+    <% }) %>
+  </div>
+  <div class="btn-row">
+    <span class="hint">Editing a step or policy spawns a new run (full re-run). Configure steps on the Setup tab.</span>
+    <form method="POST" action="/process/<%= proc.slug %>/run" style="margin-left:auto"><button class="btn">Re-run</button></form>
+  </div>
+</section>

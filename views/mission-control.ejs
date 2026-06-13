@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/mission-control.css?v=3">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body data-active="<%= active %>">
+<%
+  const fmt0 = (n) => n == null ? '--' : '$' + Math.round(n).toLocaleString('en-US');
+  const fmt2 = (n) => n == null ? '--' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const signed = (n) => (n >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
+  const decLabel = { auto_post: 'Auto-post', review: 'Review', escalate: 'Escalate' };
+  const p = d.portfolio, ctrl = d.control, learn = d.learning;
+  const pos = (v, max) => Math.max(2, Math.min(98, (v / max) * 100));
+  function band(c) {
+    const lo = Math.min(c.low, c.denise != null ? c.denise : c.low);
+    const hi = Math.max(c.high, c.denise != null ? c.denise : c.high);
+    const pad = (hi - lo) * 0.08 || 1; const a = lo - pad, b = hi + pad, span = b - a;
+    const f = (v) => Math.max(0, Math.min(100, ((v - a) / span) * 100));
+    return { lo: f(c.low), hi: f(c.high), pt: f(c.point), den: c.denise != null ? f(c.denise) : null };
+  }
+  const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg>';
+  const runTime = new Date(d.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+%>
+
+<!-- ── Top bar ──────────────────────────────────────────────── -->
+<div class="topbar"><div class="wrap">
+  <div class="brand"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Mission Control</small></span></div>
+  <div class="spacer"></div>
+  <span class="pill"><span class="dot live"></span>Running unattended</span>
+  <div class="procsel">
+    <span class="proc active">Loop 01 · Freight Accrual</span>
+    <span class="proc ghost">Loop 02 · Revenue accrual</span>
+    <span class="proc ghost">Loop 03 · Cash recon</span>
+  </div>
+  <span class="pill"><%= d.period %></span>
+</div></div>
+
+<!-- ── Plane tabs ───────────────────────────────────────────── -->
+<div class="tabbar"><div class="wrap">
+  <nav class="tabs">
+    <% ['control','execution','improvement'].forEach(function(t){ %>
+      <a class="tab <%= t %> <%= active === t ? 'on' : '' %>" href="/<%= t %>">
+        <span class="tg"><%= t === 'improvement' ? '↻' : (t === 'control' ? '◆' : '▶') %></span>
+        <span class="tx"><span class="tl"><%= tabs[t].label %></span><span class="td"><%= tabs[t].tag %></span></span>
+      </a>
+    <% }); %>
+  </nav>
+  <div class="tabspace"></div>
+  <a class="tababout <%= active === 'about' ? 'on' : '' %>" href="/about"><span class="qm">?</span>About this tool</a>
+</div></div>
+
+<div class="wrap">
+
+<% if (active === 'about') { %>
+  <!-- ════════════ ABOUT THIS TOOL (the pitch lives here) ════════════ -->
+  <section class="about">
+    <div class="eyebrow">About this tool · Ridgeline Finance OS</div>
+    <h1>Freight Accrual runs itself. <span class="accent">A human signs the exceptions.</span></h1>
+    <p class="lede">This is the first capability of Ridgeline's finance OS: a freight accrual engine that prices every shipment from carrier contracts, books the month-end accrual, and only stops a human for the entries that actually carry risk. It replaces the trailing-three-month average the role used to run by hand.</p>
+
+    <div class="abtgrid">
+      <div class="card abt"><div class="bd">
+        <span class="abt-tag control">◆ Initiate</span>
+        <h3>Oversight &amp; policy</h3>
+        <p>Sets the rules. A materiality × confidence gate decides what auto-posts, what gets reviewed, and what escalates to you. You sign off on the exceptions; everything inside policy posts on its own.</p>
+      </div></div>
+      <div class="card abt"><div class="bd">
+        <span class="abt-tag exec">▶ Execution</span>
+        <h3>Data → Processing → Outcome</h3>
+        <p>The work itself. Shipments are ingested and normalized, priced on contract math, lifted by a learned realization factor, and booked as a single balanced journal entry. This runs unattended.</p>
+      </div></div>
+      <div class="card abt"><div class="bd">
+        <span class="abt-tag learn">↻ Improve</span>
+        <h3>Learns every cycle</h3>
+        <p>Each close, the engine reconciles booked vs actual invoiced, re-fits the realization factor, and proposes policy updates that feed back into Initiate. Bands tighten over time.</p>
+      </div></div>
+    </div>
+
+    <div class="card philo"><div class="bd">
+      <h3>Deterministic by default, agentic by exception</h3>
+      <p>Most of the number is plain contract math &mdash; rate cards applied to shipment data, fully auditable, no model in the loop. A statistical realization factor, re-fit every close, adjusts for what actually gets invoiced. The agent only steps in where the data is ambiguous or the dollars are material enough to warrant a human.</p>
+    </div></div>
+
+    <div class="card philo"><div class="bd">
+      <h3>Honest read</h3>
+      <p>On a stable month, the engine and a trailing average are a statistical dead heat. The edge is the <b><%= signed(p.vsDenise) %></b> of mix-shift freight this month that a trailing average cannot see, plus a calibrated <b><%= learn.coverage.pct %>%</b> confidence band the old process never had &mdash; so you know not just the number, but how much to trust it.</p>
+    </div></div>
+
+    <div class="abtstart">
+      <a class="btn primary" href="/control">Open Initiate →</a>
+      <span class="hint">The three tabs above are the live tool. This page is just the why.</span>
+    </div>
+  </section>
+<% } else { %>
+
+  <!-- ── Operational status bar (no pitch — this is the tool) ── -->
+  <section class="opstrip">
+    <div class="opx">
+      <span class="run"><span class="dot live"></span><%= d.period %> close</span>
+      <span class="osep">·</span><span>last run <%= runTime %></span>
+      <span class="osep">·</span><span><b class="num"><%= d.ingestion.shipments %></b> shipments priced</span>
+      <span class="osep">·</span><span>policy: materiality <b class="num"><%= fmt0(d.materialityThreshold) %></b> · max CV <b class="num"><%= (d.maxCv*100) %>%</b></span>
+    </div>
+    <div class="opk">
+      <div class="kc"><span class="kk">Booked</span><span class="kv num"><%= fmt0(p.point) %></span></div>
+      <div class="kc"><span class="kk">90% band</span><span class="kv num"><%= fmt0(p.low) %>–<%= fmt0(p.high) %></span></div>
+      <div class="kc"><span class="kk">vs Denise</span><span class="kv num <%= p.vsDenise >= 0 ? 'up' : 'down' %>"><%= signed(p.vsDenise) %></span></div>
+      <div class="kc"><span class="kk">Coverage</span><span class="kv num up"><%= learn.coverage.pct %>%</span></div>
+      <div class="kc need"><span class="kk">Needs a human</span><span class="kv num"><%= ctrl.overseerQueue.length %></span></div>
+    </div>
+    <div class="opa"><a class="btn primary" href="/control">Review &amp; sign off</a></div>
+  </section>
+
+  <div class="console">
+    <!-- ════════════ ACTIVE PLANE ════════════ -->
+    <div class="planes">
+
+      <% if (active === 'control') { %>
+      <!-- ── CONTROL PLANE ──────────────────────────────────── -->
+      <section class="plane control">
+        <div class="plane-head">
+          <div class="plane-chip"><span class="pg">◆</span><span class="pt"><span class="nm">Initiate</span><span class="ds">Oversight &amp; policy</span></span></div>
+          <span class="ptag">materiality × confidence</span>
+        </div>
+        <div class="plane-body">
+          <div class="g2 wide">
+            <!-- gate matrix -->
+            <div class="matrix-wrap">
+              <div class="subh">Disposition gate</div>
+              <div class="matrix">
+                <div class="quad q-tl"></div><div class="quad q-tr"></div><div class="quad q-bl"></div><div class="quad q-br"></div>
+                <div class="thline th-v"></div><div class="thline th-h"></div>
+                <div class="qlabel ql-bl">auto-post</div>
+                <div class="qlabel ql-tr">escalate</div>
+                <% ctrl.gateMatrix.forEach(function(g){ %>
+                  <div class="node <%= g.decision %>" style="left:<%= pos(g.x,2) %>%; bottom:<%= pos(g.y,2) %>%;">
+                    <span class="pt"></span><span class="lab"><%= g.label.split(' ')[0] %></span>
+                  </div>
+                <% }); %>
+                <span class="axis-y">← material →</span>
+              </div>
+              <div class="axis-x">← confident&nbsp;&nbsp;&nbsp;uncertain →&nbsp;&nbsp;(CV vs <%= (d.maxCv*100) %>% limit)</div>
+            </div>
+
+            <!-- dispositions + overseer queue -->
+            <div>
+              <div class="subh">This cycle</div>
+              <div class="dispo">
+                <div class="d auto_post"><div class="n num"><%= ctrl.dispositions.auto_post %></div><div class="l">Auto-post</div></div>
+                <div class="d review"><div class="n num"><%= ctrl.dispositions.review %></div><div class="l">Review</div></div>
+                <div class="d escalate"><div class="n num"><%= ctrl.dispositions.escalate %></div><div class="l">Escalate</div></div>
+              </div>
+              <div class="subh">Overseer queue · sign-off required</div>
+              <div class="queue">
+                <% ctrl.overseerQueue.slice(0,5).forEach(function(q){ %>
+                <div class="qitem <%= q.severity %>">
+                  <div class="bar"></div>
+                  <div class="body"><div class="lab"><%= q.label %></div><div class="det"><%= q.detail %></div></div>
+                  <div class="act">Sign off</div>
+                </div>
+                <% }); %>
+              </div>
+            </div>
+          </div>
+
+          <!-- posture -->
+          <div class="posture">
+            <div class="subh">Posture · deterministic by default, agentic by exception</div>
+            <%
+              const det = ctrl.posture.deterministic, adj = Math.abs(ctrl.posture.realizationAdjustment);
+              const detPct = Math.min(78, Math.max(60, Math.round(det / (det + adj) * 100)));
+            %>
+            <div class="pbar">
+              <div class="det" style="width:<%= detPct %>%">[D] Contract math <%= fmt0(det) %></div>
+              <div class="adj" style="width:<%= 100 - detPct %>%">[A] Realization <%= signed(ctrl.posture.realizationAdjustment) %></div>
+            </div>
+            <div class="leg">
+              <span><b><%= Math.round(ctrl.posture.autoPostShare*100) %>%</b> of carriers auto-post-eligible</span>
+              <span><b class="num"><%= ctrl.posture.escalations %></b> escalations</span>
+              <span><b class="num"><%= d.exceptions.length %></b> exceptions raised</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <% } %>
+
+      <% if (active === 'execution') { %>
+      <!-- ── EXECUTION PLANE ────────────────────────────────── -->
+      <section class="plane exec">
+        <div class="plane-head">
+          <div class="plane-chip"><span class="pg">▶</span><span class="pt"><span class="nm">Execution</span><span class="ds">Data → Processing → Outcome</span></span></div>
+          <span class="ptag"><%= d.ingestion.shipments %> shipments priced</span>
+        </div>
+        <div class="plane-body">
+          <!-- pipeline -->
+          <div class="flow">
+            <% function stage(s, cls){ %>
+            <div class="stage">
+              <span class="stag <%= cls %>"><%= s.tag %></span>
+              <div class="st"><%= s.title %></div><div class="ss"><%= s.subtitle %></div>
+              <div class="big num"><%= s.stat %></div><div class="bl"><%= s.statLabel %></div>
+              <ul><% s.items.forEach(function(i){ %><li><%= i %></li><% }); %></ul>
+            </div>
+            <% } %>
+            <% stage(d.pipeline.data, 'D'); %>
+            <div class="arrow"><%- arrow %></div>
+            <% stage(d.pipeline.processing, 'AB'); %>
+            <div class="arrow"><%- arrow %></div>
+            <% stage(d.pipeline.outcome, 'G'); %>
+          </div>
+
+          <!-- carrier work product + chart -->
+          <div class="g2 wide" style="margin-top:18px;">
+            <div>
+              <div class="subh">Work product · per-carrier accrual</div>
+              <% d.carriers.forEach(function(c){ const bb = band(c); %>
+              <div class="carrier">
+                <div class="top">
+                  <div class="name"><%= c.label %><small><%= c.region %> · <%= c.shipmentCount %> shipments · <%= c.model %></small></div>
+                  <div class="nums"><div class="point num"><%= fmt0(c.point) %></div><div class="pband">band <span class="num"><%= fmt0(c.low) %>-<%= fmt0(c.high) %></span></div></div>
+                </div>
+                <div class="bandbar">
+                  <div class="span" style="left:<%= bb.lo %>%; right:<%= 100-bb.hi %>%;"></div>
+                  <% if (bb.den != null) { %><div class="den" style="left:<%= bb.den %>%;"></div><% } %>
+                  <div class="pt" style="left:<%= bb.pt %>%;"></div>
+                </div>
+                <div class="scale"><span class="num"><%= fmt0(c.low) %></span><span>● engine · ┊ denise</span><span class="num"><%= fmt0(c.high) %></span></div>
+                <div class="meta">
+                  <span>Contract <b class="num"><%= fmt0(c.contractual) %></b></span>
+                  <span>Factor <b class="num"><%= c.factor.toFixed(3) %></b></span>
+                  <span>vs Denise <b class="num"><%= c.vsDenise != null ? signed(c.vsDenise) : '--' %></b></span>
+                  <span class="badge <%= c.decision %>"><%= decLabel[c.decision] %></span>
+                </div>
+                <div class="weightbar"><div class="eng" style="width:<%= Math.round(c.engineWeight*100) %>%"></div><div class="base" style="width:<%= Math.round((1-c.engineWeight)*100) %>%"></div></div>
+                <div class="wlabel"><span>[A] Engine <%= Math.round(c.engineWeight*100) %>%<%= c.mixShift > 0.01 ? ' · mix-shift lift '+Math.round(c.mixShift*100)+'%' : '' %></span><span>Trailing baseline <%= Math.round((1-c.engineWeight)*100) %>%</span></div>
+              </div>
+              <% }); %>
+            </div>
+            <div>
+              <div class="card">
+                <div class="hd"><h3>Engine vs Denise</h3><p>Booked estimate against the trailing-3-month average.</p></div>
+                <div class="bd">
+                  <div class="chartbox"><canvas id="cmpChart"></canvas></div>
+                  <div class="legend"><span><i style="background:#2b6cff"></i>Engine (booked)</span><span><i style="background:#cbd5ec"></i>Denise (trailing-3)</span></div>
+                </div>
+              </div>
+              <div class="card" style="margin-top:14px;">
+                <div class="hd"><h3>Journal entry preview</h3><p><%= d.je.period %> · posts <%= d.je.date %></p></div>
+                <div class="bd">
+                  <table class="t je">
+                    <thead><tr><th>Account</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead>
+                    <tbody>
+                      <% d.je.lines.forEach(function(l){ %>
+                      <tr><td><%= l.account %><br><span style="color:var(--ink-3);font-size:10.5px;"><%= l.subledger %></span></td><td class="r deb"><%= l.debit ? fmt2(l.debit) : '' %></td><td class="r deb"><%= l.credit ? fmt2(l.credit) : '' %></td></tr>
+                      <% }); %>
+                      <tr class="tot"><td>Total</td><td class="r"><%= fmt2(d.je.total) %></td><td class="r"><%= fmt2(d.je.total) %></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- exceptions -->
+          <div class="subh" style="margin-top:20px;">Exception queue
+            <% Object.keys(d.exceptionSummary).forEach(function(s){ %><span class="badge <%= s %>" style="margin-left:6px;"><%= d.exceptionSummary[s] %> <%= s %></span><% }); %>
+          </div>
+          <div class="card"><div class="bd"><div class="exq">
+            <% d.exceptions.slice(0,8).forEach(function(x){ %>
+            <div class="exrow">
+              <span class="badge <%= x.severity %>"><%= x.severity %></span>
+              <span class="sid"><%= x.shipmentId || '--' %></span>
+              <span class="msg"><b><%= (x.type||'').replace(/_/g,' ') %></b> · <%= x.message %><%= x.carrier ? ' ('+x.carrier+')' : '' %></span>
+              <span class="imp"><%= x.dollarImpact != null ? fmt0(x.dollarImpact) : '' %></span>
+            </div>
+            <% }); %>
+          </div></div><% if (d.exceptions.length > 8) { %><div class="ft"><%= d.exceptions.length - 8 %> more queued · critical and warning surface first.</div><% } %></div>
+        </div>
+      </section>
+      <% } %>
+
+      <% if (active === 'improvement') { %>
+      <!-- ── RECURSIVE IMPROVEMENT PLANE ────────────────────── -->
+      <section class="plane learn">
+        <div class="plane-head">
+          <div class="plane-chip"><span class="pg">↻</span><span class="pt"><span class="nm">Improve</span><span class="ds">Learn loop · gets better every cycle</span></span></div>
+          <span class="ptag"><%= learn.monthsReplayed %> cycles replayed</span>
+        </div>
+        <div class="plane-body">
+          <!-- loop -->
+          <div class="loop">
+            <div class="loopnode"><div class="ic">▣</div><div class="ln">Reconcile</div><div class="ld">booked vs actual invoiced</div></div>
+            <div class="larr"><%- arrow %></div>
+            <div class="loopnode"><div class="ic">∿</div><div class="ln">Learn</div><div class="ld">re-fit realization factor</div></div>
+            <div class="larr"><%- arrow %></div>
+          </div>
+          <div class="loop" style="margin-top:-8px;">
+            <div class="loopnode"><div class="ic">✎</div><div class="ln">Propose</div><div class="ld">surface improvements</div></div>
+            <div class="larr"><%- arrow %></div>
+            <div class="loopnode"><div class="ic">◆</div><div class="ln">Update policy</div><div class="ld">feeds Initiate</div></div>
+            <div class="larr" style="opacity:.5"><%- arrow %></div>
+          </div>
+          <div class="loop-back">↻ loop closes: tighter factor &amp; bands next cycle</div>
+
+          <!-- scoreboard -->
+          <div class="scoreboard">
+            <div class="score"><div class="k">Engine MAE (forward)</div><div class="v num"><%= fmt0(learn.engineMae) %></div><div class="sub">mean abs error / carrier-month</div></div>
+            <div class="score"><div class="k">Denise MAE</div><div class="v num"><%= fmt0(learn.deniseMae) %></div><div class="sub">trailing-3 average</div></div>
+            <div class="score"><div class="k">Band coverage</div><div class="v num good"><%= learn.coverage.pct %>%</div><div class="sub"><%= learn.coverage.hits %>/<%= learn.coverage.total %> actuals in 90% band</div></div>
+          </div>
+
+          <div class="g2 wide">
+            <div class="card">
+              <div class="hd"><h3>Reconciliation trail</h3><p>Forward replay, no look-ahead: booked vs actual invoiced, per cycle.</p></div>
+              <div class="bd"><div class="chartbox"><canvas id="reconChart"></canvas></div>
+                <div class="legend"><span><i style="background:#0ea98c"></i>Engine</span><span><i style="background:#cbd5ec"></i>Denise</span><span><i style="background:#0c1322"></i>Actual</span></div>
+              </div>
+            </div>
+            <div>
+              <div class="subh">Improvement proposals</div>
+              <% learn.proposals.forEach(function(pr){ %>
+              <div class="prop"><span class="tag <%= pr.severity %>"><%= pr.severity %></span><div class="body"><div class="t"><%= pr.title %></div><div class="d"><%= pr.detail %></div></div></div>
+              <% }); %>
+            </div>
+          </div>
+        </div>
+      </section>
+      <% } %>
+
+    </div>
+
+    <!-- ════════════ EVENT LEDGER RAIL ════════════ -->
+    <aside class="ledger">
+      <div class="lh"><div class="t"><span class="dot"></span>Event Ledger</div><div class="s">Immutable record · newest first · <%= d.events.length %> events this cycle</div></div>
+      <div class="stream">
+        <% d.events.forEach(function(e){ %>
+        <div class="led <%= e.plane %>">
+          <div class="rail"><span class="ldot"></span></div>
+          <div class="lbody"><div class="lt"><span class="ltag"><%= e.tag %></span><span class="ltype"><%= e.type %></span></div><div class="lmsg"><%= e.message %></div></div>
+        </div>
+        <% }); %>
+      </div>
+    </aside>
+  </div>
+<% } %>
+
+  <div class="foot">Generated <%= new Date(d.generatedAt).toLocaleString('en-US') %> · Ridgeline Finance OS · policy: materiality <b class="num"><%= fmt0(d.materialityThreshold) %></b>, max CV <b class="num"><%= (d.maxCv*100) %>%</b> · deterministic by default, agentic by exception</div>
+</div>
+
+<script>
+  const ACTIVE = <%- JSON.stringify(active) %>;
+  const gridc = '#edf0f7', tickc = '#7b8499', tickf = { size: 11 };
+  const usd = (v) => '$' + Math.round(v).toLocaleString('en-US');
+  const k = (v) => '$' + Math.round(v/1000) + 'k';
+
+  if (ACTIVE === 'execution') {
+    const carriers = <%- JSON.stringify(d.carriers.map(c => ({ label: c.label, point: c.point, denise: c.denise }))) %>;
+    const portfolio = <%- JSON.stringify({ point: p.point, denise: p.denise }) %>;
+    new Chart(document.getElementById('cmpChart'), {
+      type: 'bar',
+      data: {
+        labels: carriers.map(c => c.label.split(' ')[0]).concat(['Portfolio']),
+        datasets: [
+          { label: 'Engine', data: carriers.map(c => c.point).concat([portfolio.point]), backgroundColor: '#2b6cff', borderRadius: 5, maxBarThickness: 24 },
+          { label: 'Denise', data: carriers.map(c => c.denise).concat([portfolio.denise]), backgroundColor: '#cbd5ec', borderRadius: 5, maxBarThickness: 24 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + usd(c.raw) } } },
+        scales: { x: { grid: { display: false }, ticks: { color: tickc, font: tickf } }, y: { grid: { color: gridc }, ticks: { color: tickc, font: tickf, callback: k } } } },
+    });
+  }
+
+  if (ACTIVE === 'improvement') {
+    const cycles = <%- JSON.stringify(learn.cycles.map(c => ({ label: c.label, engine: c.engineTotal, denise: c.deniseTotal, actual: c.actualTotal }))) %>;
+    new Chart(document.getElementById('reconChart'), {
+      type: 'line',
+      data: {
+        labels: cycles.map(c => c.label),
+        datasets: [
+          { label: 'Actual', data: cycles.map(c => c.actual), borderColor: '#0c1322', backgroundColor: '#0c1322', borderWidth: 2.5, tension: .3, pointRadius: 3 },
+          { label: 'Engine', data: cycles.map(c => c.engine), borderColor: '#0ea98c', backgroundColor: '#0ea98c', borderWidth: 2, tension: .3, pointRadius: 3, borderDash: [] },
+          { label: 'Denise', data: cycles.map(c => c.denise), borderColor: '#aab2c4', backgroundColor: '#aab2c4', borderWidth: 2, tension: .3, pointRadius: 3, borderDash: [5,4] },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + usd(c.raw) } } },
+        scales: { x: { grid: { display: false }, ticks: { color: tickc, font: tickf } }, y: { grid: { color: gridc }, ticks: { color: tickc, font: tickf, callback: k } } } },
+    });
+  }
+</script>
+</body>
+</html>

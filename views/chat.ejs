@@ -1,0 +1,61 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<main class="chat-page">
+  <div class="chat-container">
+    <div class="chat-sidebar" id="chatSidebar">
+      <div class="sidebar-header">
+        <h3>Conversations</h3>
+        <button class="btn-new-chat" id="btnNewChat" title="New conversation">+ New</button>
+      </div>
+      <div class="conversation-list" id="conversationList">
+        <p class="empty-state">No conversations yet</p>
+      </div>
+    </div>
+
+    <div class="chat-main">
+      <div class="chat-header" id="chatHeader">
+        <div class="agent-info">
+          <div class="agent-avatar" id="agentAvatar">O</div>
+          <div>
+            <select id="agentSelect" class="agent-select" title="Switch agent">
+              <option value="">Loading agents...</option>
+            </select>
+            <p id="agentDescription">AI Advisory Assistant</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="btn-icon" id="btnChatSize" title="Change chat size">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          </button>
+          <button class="btn-icon" id="btnToggleSidebar" title="Toggle sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="welcome-message">
+          <div class="agent-avatar large">O</div>
+          <h3>Welcome to Orphil</h3>
+          <p>I'm Orphil's AI assistant. I can help you learn about our AI transformation services for finance, accounting, and consulting firms. Ask me anything.</p>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="chat-input-wrapper">
+          <textarea id="chatInput" placeholder="Ask Orphil anything..." rows="1" maxlength="10000"></textarea>
+          <button class="btn-send" id="btnSend" title="Send message">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </div>
+        <p class="input-hint">Press Enter to send, Shift+Enter for new line</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<link rel="stylesheet" href="/css/chat.css">
+<script src="/js/chat.js"></script>
+
+<%- include('partials/footer') %>

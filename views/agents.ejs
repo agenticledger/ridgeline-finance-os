@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Mission Control</small></span></a>
+  <div class="orgsel" title="Organization (tenant)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M19 21V11a2 2 0 0 0-2-2h-2"/><path d="M9 7h2M9 11h2M9 15h2"/></svg>
+    <select aria-label="Organization" disabled><option><%= org && org.name ? org.name : org %></option></select>
+  </div>
+  <a class="navlink" href="/registry">Tools Registry</a>
+  <div class="grow"></div>
+  <%- include('partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div class="wsub"><div class="row">
+  <a class="wsub-back" href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Processes</a>
+  <span class="wsub-sep"></span>
+  <span class="wsub-tile defined">A</span>
+  <div class="wsub-id">
+    <h1>Agents</h1>
+    <p>The agents that own and improve finance processes. Manage instructions, knowledge, long-term memory, and capabilities.</p>
+  </div>
+  <div class="grow"></div>
+  <button class="btn ghost" id="lockBtn" type="button" hidden>Sign out</button>
+</div></div>
+
+<!-- Login gate -->
+<div class="ag-gate" id="authGate" hidden>
+  <form class="ag-gatecard" id="authForm">
+    <h2>Admin sign in</h2>
+    <p>Managing agents requires the admin key. Sign in to continue.</p>
+    <label class="ag-lab">Password</label>
+    <input type="password" id="authPw" autocomplete="current-password" placeholder="Admin password">
+    <p class="ag-error" id="authErr" hidden></p>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+</div>
+
+<!-- Console -->
+<div class="agwrap" id="console" hidden>
+  <!-- LEFT: agent list -->
+  <section class="aglist">
+    <div class="aglist-head">
+      <h3>Agents <span class="bp-n" id="agCount">0</span></h3>
+      <button class="btn primary btn-sm" id="newAgentBtn" type="button">+ New</button>
+    </div>
+    <div id="agItems"><p class="ag-muted">Loading...</p></div>
+  </section>
+
+  <!-- RIGHT: detail -->
+  <section class="agpanel" id="agPanel">
+    <div class="ag-empty" id="agEmpty">
+      <div class="ae-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></div>
+      <p>Select an agent on the left, or create a new one to manage its instructions, knowledge, memory, and capabilities.</p>
+    </div>
+    <div id="agDetail" hidden></div>
+  </section>
+</div>
+
+<!-- Modal -->
+<div class="ag-modal" id="modal" hidden>
+  <div class="ag-modal-card" id="modalCard"></div>
+</div>
+
+<script>
+(function(){
+  var TOKEN_KEY='rl-admin-token';
+  var gate=document.getElementById('authGate');
+  var consoleEl=document.getElementById('console');
+  var authForm=document.getElementById('authForm');
+  var authPw=document.getElementById('authPw');
+  var authErr=document.getElementById('authErr');
+  var lockBtn=document.getElementById('lockBtn');
+  var agItems=document.getElementById('agItems');
+  var agCount=document.getElementById('agCount');
+  var agEmpty=document.getElementById('agEmpty');
+  var agDetail=document.getElementById('agDetail');
+  var newAgentBtn=document.getElementById('newAgentBtn');
+  var modal=document.getElementById('modal');
+  var modalCard=document.getElementById('modalCard');
+
+  var token=null;
+  var agents=[];
+  var selectedId=null;
+  var activeTab='profile';
+
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+  function api(method,path,body){
+    var opts={method:method,headers:{}};
+    if(token)opts.headers['X-Admin-Key']=token;
+    if(body!==undefined){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
+    return fetch(path,opts).then(function(r){
+      if(r.status===401){signOut();throw new Error('Session expired. Sign in again.');}
+      return r.json().then(function(j){if(!j.ok&&j.ok!==undefined&&j.error)throw new Error(j.error);return j;});
+    });
+  }
+
+  // ── Auth ──
+  function signOut(){token=null;try{localStorage.removeItem(TOKEN_KEY);}catch(e){}gate.hidden=false;consoleEl.hidden=true;lockBtn.hidden=true;}
+  function signedIn(){gate.hidden=true;consoleEl.hidden=false;lockBtn.hidden=false;loadAgents();}
+  lockBtn.addEventListener('click',signOut);
+
+  authForm.addEventListener('submit',function(e){
+    e.preventDefault();authErr.hidden=true;
+    fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:authPw.value})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j.ok){authErr.textContent=j.error||'Invalid password';authErr.hidden=false;return;}
+        token=j.data.token;try{localStorage.setItem(TOKEN_KEY,token);}catch(e){}
+        authPw.value='';signedIn();
+      })
+      .catch(function(){authErr.textContent='Could not sign in.';authErr.hidden=false;});
+  });
+
+  // ── Agent list ──
+  function loadAgents(){
+    api('GET','/api/agents').then(function(j){
+      agents=j.data||[];agCount.textContent=agents.length;renderList();
+      if(selectedId&&!agents.some(function(a){return a.id===selectedId;}))selectedId=null;
+      if(selectedId)selectAgent(selectedId);
+    }).catch(function(err){agItems.innerHTML='<p class="ag-error">'+esc(err.message)+'</p>';});
+  }
+
+  function renderList(){
+    if(!agents.length){agItems.innerHTML='<p class="ag-muted">No agents yet. Create one to get started.</p>';return;}
+    agItems.innerHTML='';
+    agents.forEach(function(a){
+      var card=document.createElement('button');
+      card.type='button';card.className='ag-card'+(a.id===selectedId?' on':'');
+      card.innerHTML='<div class="ag-card-top"><span class="ag-av">'+esc((a.name||'?').slice(0,1).toUpperCase())+'</span><b>'+esc(a.name)+'</b></div>'+
+        '<p>'+esc(a.description||'')+'</p>'+
+        '<div class="ag-card-meta"><span>'+esc(a.kbDocumentCount||0)+' docs</span>'+(a.defaultModel?'<span class="mono">'+esc(a.defaultModel)+'</span>':'')+'</div>';
+      card.addEventListener('click',function(){selectAgent(a.id);});
+      agItems.appendChild(card);
+    });
+  }
+
+  // ── Agent detail ──
+  function selectAgent(id){selectedId=id;activeTab='profile';renderList();renderDetail();}
+
+  function renderDetail(){
+    var a=agents.find(function(x){return x.id===selectedId;});
+    if(!a){agEmpty.hidden=false;agDetail.hidden=true;return;}
+    agEmpty.hidden=true;agDetail.hidden=false;
+    agDetail.innerHTML=
+      '<div class="ag-dhead">'+
+        '<div><h2>'+esc(a.name)+'</h2><p class="ag-muted mono">'+esc(a.slug)+'</p></div>'+
+        '<div class="ag-dactions">'+
+          '<a class="btn ghost btn-sm" href="/chat" target="_blank">Open chat</a>'+
+          '<button class="btn ghost btn-sm" id="delAgent" type="button">Delete</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="ag-tabs">'+
+        ['profile','knowledge','memory','capabilities'].map(function(t){
+          return '<button class="ag-tab'+(t===activeTab?' on':'')+'" data-tab="'+t+'">'+t.charAt(0).toUpperCase()+t.slice(1)+'</button>';
+        }).join('')+
+      '</div>'+
+      '<div class="ag-tabbody" id="tabBody"></div>';
+    agDetail.querySelectorAll('.ag-tab').forEach(function(b){b.addEventListener('click',function(){activeTab=b.dataset.tab;renderDetail();});});
+    agDetail.querySelector('#delAgent').addEventListener('click',function(){
+      if(!confirm('Delete agent "'+a.name+'"? It will be deactivated.'))return;
+      api('DELETE','/api/agents/'+a.id).then(function(){selectedId=null;loadAgents();renderDetail();});
+    });
+    if(activeTab==='profile')renderProfile(a);
+    else if(activeTab==='knowledge')renderKnowledge(a);
+    else if(activeTab==='memory')renderMemory(a);
+    else renderCapabilities(a);
+  }
+
+  function field(label,id,val,ta){
+    return '<label class="ag-field"><span class="ag-lab">'+label+'</span>'+
+      (ta?'<textarea id="'+id+'" rows="'+ta+'">'+esc(val||'')+'</textarea>':'<input id="'+id+'" value="'+esc(val||'')+'">')+'</label>';
+  }
+
+  function renderProfile(a){
+    var b=document.getElementById('tabBody');
+    api('GET','/api/agents/'+a.id).then(function(j){
+      var full=j.data;
+      b.innerHTML='<form class="ag-form" id="profForm">'+
+        field('Name','f_name',full.name)+
+        field('Description','f_desc',full.description)+
+        field('Default model','f_model',full.defaultModel)+
+        field('Instructions (system prompt)','f_inst',full.instructions,10)+
+        '<div class="ag-formbar"><button class="btn primary" type="submit">Save changes</button><span class="ag-savenote" id="profNote"></span></div>'+
+        '</form>';
+      document.getElementById('profForm').addEventListener('submit',function(e){
+        e.preventDefault();
+        var note=document.getElementById('profNote');note.textContent='Saving...';
+        api('PATCH','/api/agents/'+a.id,{
+          name:document.getElementById('f_name').value,
+          description:document.getElementById('f_desc').value,
+          defaultModel:document.getElementById('f_model').value||null,
+          instructions:document.getElementById('f_inst').value,
+        }).then(function(){note.textContent='Saved.';loadAgents();}).catch(function(err){note.textContent=err.message;});
+      });
+    }).catch(function(err){b.innerHTML='<p class="ag-error">'+esc(err.message)+'</p>';});
+  }
+
+  function renderKnowledge(a){
+    var b=document.getElementById('tabBody');
+    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Documents are chunked and embedded for retrieval (needs an OpenAI key for embeddings).</p><button class="btn primary btn-sm" id="addDoc" type="button">+ Add document</button></div><div id="docList"><p class="ag-muted">Loading...</p></div>';
+    document.getElementById('addDoc').addEventListener('click',function(){docModal(a);});
+    api('GET','/api/agents/'+a.id+'/documents').then(function(j){
+      var docs=j.data||[];var dl=document.getElementById('docList');
+      if(!docs.length){dl.innerHTML='<p class="ag-muted">No documents yet.</p>';return;}
+      dl.innerHTML='';docs.forEach(function(d){
+        var row=document.createElement('div');row.className='ag-row';
+        row.innerHTML='<div><b>'+esc(d.name)+'</b><span class="ag-rowmeta mono">'+esc(d.sourceType)+' · '+esc(d.chunkCount||0)+' chunks</span></div><button class="ag-del" type="button" aria-label="delete">&times;</button>';
+        row.querySelector('.ag-del').addEventListener('click',function(){
+          if(!confirm('Delete document "'+d.name+'"?'))return;
+          api('DELETE','/api/agents/'+a.id+'/documents/'+d.id).then(function(){renderDetail();});
+        });
+        dl.appendChild(row);
+      });
+    }).catch(function(err){document.getElementById('docList').innerHTML='<p class="ag-error">'+esc(err.message)+'</p>';});
+  }
+
+  function renderMemory(a){
+    var b=document.getElementById('tabBody');
+    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Long-term memory documents the agent reads and writes across runs.</p><button class="btn primary btn-sm" id="addMem" type="button">+ Add memory</button></div><div id="memList"><p class="ag-muted">Loading...</p></div>';
+    document.getElementById('addMem').addEventListener('click',function(){memModal(a,null);});
+    api('GET','/api/agents/'+a.id+'/memory').then(function(j){
+      var mem=j.data||[];var ml=document.getElementById('memList');
+      if(!mem.length){ml.innerHTML='<p class="ag-muted">No memory documents yet.</p>';return;}
+      ml.innerHTML='';mem.forEach(function(m){
+        var row=document.createElement('div');row.className='ag-row';
+        row.innerHTML='<div><b>'+esc(m.docKey)+'</b><span class="ag-rowmeta mono">'+esc(m.docType)+'</span><p class="ag-prev">'+esc(m.contentPreview||'')+'</p></div><div class="ag-rowbtns"><button class="ag-edit" type="button">Edit</button><button class="ag-del" type="button" aria-label="delete">&times;</button></div>';
+        row.querySelector('.ag-edit').addEventListener('click',function(){memModal(a,m);});
+        row.querySelector('.ag-del').addEventListener('click',function(){
+          if(!confirm('Delete memory "'+m.docKey+'"?'))return;
+          api('DELETE','/api/agents/'+a.id+'/memory/'+encodeURIComponent(m.docKey)).then(function(){renderDetail();});
+        });
+        ml.appendChild(row);
+      });
+    }).catch(function(err){document.getElementById('memList').innerHTML='<p class="ag-error">'+esc(err.message)+'</p>';});
+  }
+
+  function renderCapabilities(a){
+    var b=document.getElementById('tabBody');
+    b.innerHTML='<div class="ag-subbar"><p class="ag-muted">Toggle which platform capabilities this agent can use.</p></div><div id="capList"><p class="ag-muted">Loading...</p></div>';
+    Promise.all([api('GET','/api/capabilities'),api('GET','/api/agents/'+a.id+'/capabilities')]).then(function(res){
+      var all=res[0].data||[];var mine=res[1].data||[];
+      var mineIds={};mine.forEach(function(c){mineIds[c.capabilityId]=true;});
+      var cl=document.getElementById('capList');
+      if(!all.length){cl.innerHTML='<p class="ag-muted">No capabilities defined on the platform yet.</p>';return;}
+      cl.innerHTML='';all.forEach(function(c){
+        var on=!!mineIds[c.id];
+        var row=document.createElement('div');row.className='ag-row';
+        row.innerHTML='<div><b>'+esc(c.name)+'</b><span class="ag-rowmeta mono">'+esc(c.type||'')+'</span><p class="ag-prev">'+esc(c.description||'')+'</p></div><button class="btn '+(on?'primary':'ghost')+' btn-sm ag-captoggle" type="button">'+(on?'Enabled':'Enable')+'</button>';
+        row.querySelector('.ag-captoggle').addEventListener('click',function(){
+          var p=on?api('DELETE','/api/agents/'+a.id+'/capabilities/'+c.id):api('PUT','/api/agents/'+a.id+'/capabilities/'+c.id,{config:{}});
+          p.then(function(){renderDetail();});
+        });
+        cl.appendChild(row);
+      });
+    }).catch(function(err){document.getElementById('capList').innerHTML='<p class="ag-error">'+esc(err.message)+'</p>';});
+  }
+
+  // ── Modals ──
+  function openModal(html){modalCard.innerHTML=html;modal.hidden=false;}
+  function closeModal(){modal.hidden=true;modalCard.innerHTML='';}
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  newAgentBtn.addEventListener('click',function(){
+    openModal('<h2>New agent</h2>'+
+      field('Name','n_name','')+
+      field('Description','n_desc','')+
+      field('Default model','n_model','claude-sonnet-4-6')+
+      field('Instructions (system prompt)','n_inst','',8)+
+      '<p class="ag-error" id="nErr" hidden></p>'+
+      '<div class="ag-modalbar"><button class="btn ghost" id="nCancel" type="button">Cancel</button><button class="btn primary" id="nCreate" type="button">Create agent</button></div>');
+    document.getElementById('nCancel').addEventListener('click',closeModal);
+    document.getElementById('nCreate').addEventListener('click',function(){
+      var err=document.getElementById('nErr');err.hidden=true;
+      var body={name:document.getElementById('n_name').value,description:document.getElementById('n_desc').value,instructions:document.getElementById('n_inst').value,defaultModel:document.getElementById('n_model').value||null};
+      if(!body.name||!body.description||!body.instructions){err.textContent='Name, description, and instructions are required.';err.hidden=false;return;}
+      api('POST','/api/agents',body).then(function(j){closeModal();selectedId=j.data.id;loadAgents();}).catch(function(e){err.textContent=e.message;err.hidden=false;});
+    });
+  });
+
+  function docModal(a){
+    openModal('<h2>Add document</h2>'+
+      field('Name','d_name','')+
+      field('Content','d_content','',10)+
+      '<p class="ag-error" id="dErr" hidden></p>'+
+      '<div class="ag-modalbar"><button class="btn ghost" id="dCancel" type="button">Cancel</button><button class="btn primary" id="dSave" type="button">Add</button></div>');
+    document.getElementById('dCancel').addEventListener('click',closeModal);
+    document.getElementById('dSave').addEventListener('click',function(){
+      var err=document.getElementById('dErr');err.hidden=true;
+      var body={name:document.getElementById('d_name').value,content:document.getElementById('d_content').value};
+      if(!body.name||!body.content){err.textContent='Name and content are required.';err.hidden=false;return;}
+      api('POST','/api/agents/'+a.id+'/documents',body).then(function(){closeModal();renderDetail();loadAgents();}).catch(function(e){err.textContent=e.message;err.hidden=false;});
+    });
+  }
+
+  function memModal(a,m){
+    var editing=!!m;
+    openModal('<h2>'+(editing?'Edit memory':'Add memory')+'</h2>'+
+      '<label class="ag-field"><span class="ag-lab">Key</span><input id="m_key" value="'+esc(editing?m.docKey:'')+'"'+(editing?' readonly':'')+'></label>'+
+      field('Content','m_content','',10)+
+      '<p class="ag-error" id="mErr" hidden></p>'+
+      '<div class="ag-modalbar"><button class="btn ghost" id="mCancel" type="button">Cancel</button><button class="btn primary" id="mSave" type="button">Save</button></div>');
+    document.getElementById('mCancel').addEventListener('click',closeModal);
+    if(editing){
+      api('GET','/api/agents/'+a.id+'/memory/'+encodeURIComponent(m.docKey)).then(function(j){document.getElementById('m_content').value=j.data.content||'';});
+    }
+    document.getElementById('mSave').addEventListener('click',function(){
+      var err=document.getElementById('mErr');err.hidden=true;
+      var key=document.getElementById('m_key').value;var content=document.getElementById('m_content').value;
+      if(!key||!content){err.textContent='Key and content are required.';err.hidden=false;return;}
+      api('PUT','/api/agents/'+a.id+'/memory/'+encodeURIComponent(key),{content:content}).then(function(){closeModal();renderDetail();}).catch(function(e){err.textContent=e.message;err.hidden=false;});
+    });
+  }
+
+  // ── Boot ──
+  try{token=localStorage.getItem(TOKEN_KEY);}catch(e){}
+  if(token){
+    // Validate token by hitting an admin-only endpoint.
+    fetch('/api/capabilities',{headers:{'X-Admin-Key':token}}).then(function(r){
+      if(r.status===401){signOut();}else{signedIn();}
+    }).catch(function(){signOut();});
+  }else{gate.hidden=false;}
+})();
+</script>
+<script src="/js/theme.js"></script>
+</body>
+</html>

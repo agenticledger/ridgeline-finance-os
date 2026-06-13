@@ -1,0 +1,292 @@
+<!-- Setup — Configure collapses to two surfaces: Definition (identity + improvement)
+     and Steps (each step owns the tools it runs on and the policies it applies). -->
+<%
+  const decLabel = { policy_based:'Policy', judgment_based:'Judgment', mixed:'Mixed' };
+  const toolTypeLabel = { automation:'Automation', skill:'Skill', agent:'Agent', prompt:'Prompt', mcp:'Integration', human:'Human' };
+  const it = proc.improveTrigger || {};
+  const curFnSlug = proc.function ? proc.function.slug : '';
+%>
+
+<% if(section==='steps'){ %>
+  <section class="setupsec">
+    <div class="sec-head">
+      <h2>Steps</h2>
+      <p><b><%= proc.steps.length %></b> steps. The ordered checklist the agent runs each period. Each step owns the <b>tools</b> it runs on (automations, agents, prompts, integrations) and the <b>policies</b> it applies. Gated steps pause for a human before the run continues.</p>
+    </div>
+
+    <div class="steplist">
+      <% proc.steps.forEach(function(s){
+           var attachedIds = (s.tools||[]).map(function(t){return t.toolId;});
+           var available = allTools.filter(function(t){return attachedIds.indexOf(t.id)<0;});
+      %>
+      <div class="stepcard <%= s.isGate?'gate':'' %>">
+
+        <!-- step delete (associated by form= so it isn't nested) -->
+        <form id="delstep-<%= s.id %>" method="POST" action="/process/<%= proc.slug %>/config/step/<%= s.id %>/delete" onsubmit="return confirm('Remove step &quot;<%= s.name %>&quot;? This cannot be undone.')"></form>
+
+        <!-- step identity / edit -->
+        <form class="cfgform sc-main" method="POST" action="/process/<%= proc.slug %>/config/step/<%= s.id %>">
+          <div class="sc-top">
+            <div class="sc-num"><%= s.order %></div>
+            <div class="sc-id">
+              <input class="sc-name" type="text" name="name" value="<%= s.name %>" required>
+              <div class="sc-meta">
+                <select name="decisionType" class="sc-sel">
+                  <% ['policy_based','judgment_based','mixed'].forEach(function(d){ %>
+                    <option value="<%= d %>" <%= s.decisionType===d?'selected':'' %>><%= decLabel[d] %></option>
+                  <% }) %>
+                </select>
+                <label class="cfg-check"><input type="checkbox" name="isGate" <%= s.isGate?'checked':'' %>> Gate</label>
+                <label class="cfg-check"><input type="checkbox" name="pauseAfter" <%= s.pauseAfter?'checked':'' %>> Pause after</label>
+                <span class="sc-ver">v<%= s.version %></span>
+              </div>
+            </div>
+          </div>
+          <label class="field">
+            <span class="fl">Description</span>
+            <textarea name="description" rows="2"><%= s.description||'' %></textarea>
+          </label>
+          <div class="cfg-actions">
+            <button type="submit" form="delstep-<%= s.id %>" class="btn ghost btn-sm">Remove step</button>
+            <button type="submit" class="btn primary btn-sm">Save step</button>
+          </div>
+        </form>
+
+        <!-- nested registries: tools + policies for this step -->
+        <div class="sc-panels">
+
+          <!-- TOOLS -->
+          <div class="sc-panel">
+            <div class="sc-ph"><span class="sc-pt">Tools</span><span class="sc-pc"><%= (s.tools||[]).length %></span></div>
+            <div class="sc-chips">
+              <% (s.tools||[]).forEach(function(t){ %>
+                <span class="toolchip <%= t.type %>">
+                  <span class="tc-ty"><%= toolTypeLabel[t.type]||t.type %></span>
+                  <span class="tc-nm"><%= t.name %></span>
+                  <% if(t.role==='engine'){ %><span class="tc-rl">engine</span><% } %>
+                  <form method="POST" action="/process/<%= proc.slug %>/config/step/<%= s.id %>/tools/<%= t.stepToolId %>/detach" onsubmit="return confirm('Detach <%= t.name %> from this step?')">
+                    <button type="submit" class="tc-x" title="Detach">&times;</button>
+                  </form>
+                </span>
+              <% }) %>
+              <% if(!(s.tools||[]).length){ %><span class="sc-none">No tools attached.</span><% } %>
+            </div>
+            <% if(available.length){ %>
+            <form class="sc-attach" method="POST" action="/process/<%= proc.slug %>/config/step/<%= s.id %>/tools/attach">
+              <select name="toolId" required>
+                <option value="">Attach a tool from the library…</option>
+                <% ['automation','agent','skill','prompt','mcp'].forEach(function(grp){
+                     var inGrp = available.filter(function(t){return t.type===grp;});
+                     if(!inGrp.length) return; %>
+                  <optgroup label="<%= toolTypeLabel[grp]||grp %>">
+                    <% inGrp.forEach(function(t){ %><option value="<%= t.id %>"><%= t.name %></option><% }) %>
+                  </optgroup>
+                <% }) %>
+              </select>
+              <button type="submit" class="btn ghost btn-sm">+ Attach</button>
+            </form>
+            <% } %>
+          </div>
+
+          <!-- POLICIES -->
+          <div class="sc-panel">
+            <div class="sc-ph"><span class="sc-pt">Policies</span><span class="sc-pc"><%= (s.policies||[]).length %></span></div>
+            <div class="sc-pols">
+              <% (s.policies||[]).forEach(function(p){ var keys=Object.keys(p.params||{}); %>
+                <form id="delpol-<%= p.id %>" method="POST" action="/process/<%= proc.slug %>/config/policy/<%= p.id %>/delete" onsubmit="return confirm('Remove policy &quot;<%= p.name %>&quot;?')"></form>
+                <form class="polmini cfgform" method="POST" action="/process/<%= proc.slug %>/config/policy/<%= p.id %>">
+                  <div class="pm-h"><span class="pm-nm"><%= p.name %></span><span class="pm-v">v<%= p.version %></span></div>
+                  <textarea name="definition" rows="2" class="pm-def"><%= p.definition||'' %></textarea>
+                  <% if(keys.length){ %>
+                    <div class="pm-params">
+                      <% keys.forEach(function(k){ %>
+                        <label class="pm-param">
+                          <span class="pmk"><%= k %></span>
+                          <input type="hidden" name="pkey" value="<%= k %>">
+                          <input type="text" name="pval" value="<%= p.params[k]===''?'':p.params[k] %>">
+                        </label>
+                      <% }) %>
+                    </div>
+                  <% } %>
+                  <div class="pm-actions">
+                    <button type="submit" form="delpol-<%= p.id %>" class="btn ghost btn-xs">Remove</button>
+                    <button type="submit" class="btn primary btn-xs">Save</button>
+                  </div>
+                </form>
+              <% }) %>
+              <% if(!(s.policies||[]).length){ %><span class="sc-none">No policies on this step.</span><% } %>
+            </div>
+            <form class="sc-addpol" method="POST" action="/process/<%= proc.slug %>/config/policy/add">
+              <input type="hidden" name="stepId" value="<%= s.id %>">
+              <input type="text" name="name" placeholder="New policy name" required>
+              <input type="text" name="definition" placeholder="The rule in plain language">
+              <button type="submit" class="btn ghost btn-sm">+ Add policy</button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+      <% }) %>
+      <% if(!proc.steps.length){ %><p class="cfg-empty">No steps defined yet.</p><% } %>
+    </div>
+
+    <!-- add a step -->
+    <form class="cfgform cfg-map" method="POST" action="/process/<%= proc.slug %>/config/step/add">
+      <div class="sec-head" style="margin-bottom:10px"><h2 style="font-size:15px">Add a step</h2><p>Appends to the end of the checklist. Attach its tools and policies after it is created.</p></div>
+      <div class="cfg-grid">
+        <label class="field">
+          <span class="fl">Name</span>
+          <input type="text" name="name" placeholder="e.g. Validate vendor invoices" required>
+        </label>
+        <label class="field">
+          <span class="fl">Decision type</span>
+          <select name="decisionType">
+            <% ['policy_based','judgment_based','mixed'].forEach(function(d){ %>
+              <option value="<%= d %>"><%= decLabel[d] %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span class="fl">Description</span>
+        <textarea name="description" rows="2" placeholder="What this step does each period."></textarea>
+      </label>
+      <div class="cfg-actions">
+        <button type="submit" class="btn primary">+ Add step</button>
+      </div>
+    </form>
+
+    <% if(proc.policies && proc.policies.length){ %>
+    <div class="sec-head" style="margin-top:26px"><h2 style="font-size:15px">Process-scope policies</h2><p>Policies not pinned to a single step. They apply across the whole process.</p></div>
+    <div class="sc-pols wide">
+      <% proc.policies.forEach(function(p){ var keys=Object.keys(p.params||{}); %>
+        <form id="delpol-<%= p.id %>" method="POST" action="/process/<%= proc.slug %>/config/policy/<%= p.id %>/delete" onsubmit="return confirm('Remove policy &quot;<%= p.name %>&quot;?')"></form>
+        <form class="polmini cfgform" method="POST" action="/process/<%= proc.slug %>/config/policy/<%= p.id %>">
+          <div class="pm-h"><span class="pm-nm"><%= p.name %></span><span class="pm-v">v<%= p.version %></span></div>
+          <textarea name="definition" rows="2" class="pm-def"><%= p.definition||'' %></textarea>
+          <% if(keys.length){ %>
+            <div class="pm-params">
+              <% keys.forEach(function(k){ %>
+                <label class="pm-param"><span class="pmk"><%= k %></span><input type="hidden" name="pkey" value="<%= k %>"><input type="text" name="pval" value="<%= p.params[k]===''?'':p.params[k] %>"></label>
+              <% }) %>
+            </div>
+          <% } %>
+          <div class="pm-actions"><button type="submit" form="delpol-<%= p.id %>" class="btn ghost btn-xs">Remove</button><button type="submit" class="btn primary btn-xs">Save</button></div>
+        </form>
+      <% }) %>
+    </div>
+    <% } %>
+  </section>
+
+<% } else { /* Definition (default) — identity + improvement folded in */
+     var units = (typeof orgUnits!=='undefined' && orgUnits) ? orgUnits : [];
+     var curLeId = proc.legalEntity ? proc.legalEntity.id : '';
+     var curBuId = proc.businessUnit ? proc.businessUnit.id : '';
+%>
+  <section class="setupsec">
+    <div class="sec-head">
+      <h2>Definition</h2>
+      <p>The identity, placement and cadence of this process. Organization is the structural root; legal entity, business unit, function, cadence and description are all editable.</p>
+    </div>
+    <form class="cfgform" method="POST" action="/process/<%= proc.slug %>/config/definition">
+      <div class="cfg-grid">
+        <label class="field">
+          <span class="fl">Process name</span>
+          <input type="text" name="name" value="<%= proc.name %>" required>
+        </label>
+        <label class="field">
+          <span class="fl">Sub-function</span>
+          <select name="functionSlug">
+            <option value="">Unassigned</option>
+            <% subfunctions.forEach(function(sf){ %>
+              <option value="<%= sf.slug %>" <%= curFnSlug===sf.slug?'selected':'' %>><%= sf.name %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="field">
+          <span class="fl">Legal entity</span>
+          <select name="legalEntityId" id="cfg-le" onchange="cfgSyncBU()">
+            <% units.forEach(function(le){ %>
+              <option value="<%= le.id %>" <%= curLeId===le.id?'selected':'' %>><%= le.name %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="field">
+          <span class="fl">Business unit</span>
+          <select name="businessUnitId" id="cfg-bu">
+            <option value="">None</option>
+            <% units.forEach(function(le){ le.businessUnits.forEach(function(bu){ %>
+              <option value="<%= bu.id %>" data-le="<%= le.id %>" <%= curBuId===bu.id?'selected':'' %>><%= bu.name %></option>
+            <% }); }) %>
+          </select>
+        </label>
+        <label class="field">
+          <span class="fl">Frequency</span>
+          <select name="frequency">
+            <% ['monthly','quarterly','weekly','daily','annual','ad-hoc'].forEach(function(f){ %>
+              <option value="<%= f %>" <%= proc.frequency===f?'selected':'' %>><%= f.charAt(0).toUpperCase()+f.slice(1) %></option>
+            <% }) %>
+          </select>
+        </label>
+        <label class="field">
+          <span class="fl">Run mode</span>
+          <select name="mode">
+            <% ['manual','auto','adhoc'].forEach(function(m){ %>
+              <option value="<%= m %>" <%= proc.mode===m?'selected':'' %>><%= m.charAt(0).toUpperCase()+m.slice(1) %></option>
+            <% }) %>
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span class="fl">Description</span>
+        <textarea name="description" rows="3"><%= proc.description||'' %></textarea>
+      </label>
+      <div class="cfg-readonly">
+        <span><span class="rl">Organization</span><b><%= proc.org.name %></b></span>
+      </div>
+      <div class="cfg-actions">
+        <button type="submit" class="btn primary">Save definition</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="setupsec">
+    <div class="sec-head">
+      <h2>Improvement</h2>
+      <p>How the self-review loop runs. When triggered, the Improvement Agent ingests the last N runs' steps, outcomes and policies, reconciles booked vs actual, and proposes parameter changes for review.</p>
+    </div>
+    <form class="cfgform" method="POST" action="/process/<%= proc.slug %>/config/improve">
+      <div class="cfg-grid">
+        <label class="field">
+          <span class="fl">Trigger mode</span>
+          <select name="mode">
+            <option value="auto" <%= (it.mode||'auto')==='auto'?'selected':'' %>>Auto</option>
+            <option value="manual" <%= it.mode==='manual'?'selected':'' %>>Manual</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="fl">Runs ingested per cycle</span>
+          <input type="number" name="lookbackRuns" min="1" max="36" value="<%= it.lookbackRuns||6 %>">
+        </label>
+      </div>
+      <div class="cfg-actions">
+        <button type="submit" class="btn primary">Save trigger</button>
+      </div>
+    </form>
+  </section>
+  <script>
+    // Show only business units belonging to the selected legal entity.
+    function cfgSyncBU(){
+      var le=document.getElementById('cfg-le'), bu=document.getElementById('cfg-bu');
+      if(!le||!bu) return; var leId=le.value, cleared=false;
+      Array.prototype.forEach.call(bu.options,function(o){
+        if(!o.value){ return; }
+        var match=o.getAttribute('data-le')===leId;
+        o.hidden=!match; o.disabled=!match;
+        if(!match && o.selected){ cleared=true; }
+      });
+      if(cleared) bu.value='';
+    }
+    cfgSyncBU();
+  </script>
+<% } %>

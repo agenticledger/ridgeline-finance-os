@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+<%
+  const fmt0 = (n) => n == null ? '--' : '$' + Math.round(n).toLocaleString('en-US');
+  const fmt2 = (n) => n == null ? '--' : '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const signed = (n) => n == null ? '--' : (n>=0?'+':'-') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
+  const pct = (n) => (n*100).toFixed(1) + '%';
+  const decLabel = { auto_post:'Auto-post', review:'Review', escalate:'Escalate' };
+  const s = summary || {};
+  const carriers = s.carriers || [];
+  const ctrl = s.control || {};
+  const learn = s.learning || {};
+  const queue = (ctrl.overseerQueue || []);
+  const st = run ? run.status : null;
+  const frozen = run ? run.frozen : false;
+  // hero state
+  let heroState='good', heroLabel='Auto-posted', heroTitle='This month\u2019s freight accrual is booked.';
+  if(st==='awaiting_human'){heroState='attention';heroLabel='Awaiting your sign-off';heroTitle='Three carriers escalated. Review and sign to post the journal entry.';}
+  else if(st==='needs_review'){heroState='attention';heroLabel='Needs review';heroTitle='One or more carriers flagged for review before posting.';}
+  else if(st==='posted'){heroState='posted';heroLabel='Posted to the ledger';heroTitle='The accrual journal entry is posted.';}
+  function band(c){
+    const lo=Math.min(c.low,c.denise!=null?c.denise:c.low), hi=Math.max(c.high,c.denise!=null?c.denise:c.high);
+    const pad=(hi-lo)*0.08||1, a=lo-pad, b=hi+pad, span=b-a||1;
+    const f=(v)=>Math.max(0,Math.min(100,((v-a)/span)*100));
+    return {lo:f(c.low),hi:f(c.high),pt:f(c.point),den:c.denise!=null?f(c.denise):null};
+  }
+  const runTime = run ? new Date(run.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+  const proc = process;
+  function evPlane(action){ if(['SIGN_OFF','RUN_STARTED','FREEZE'].includes(action))return'system'; if(action==='GATE'||action.includes('ESCALATE')||action.includes('EXCEPTION')||action.includes('REVIEW'))return'control'; if(['CALIBRATE','RECONCILE'].includes(action))return'improvement'; return'execution'; }
+%>
+
+<%
+  const needsYou = (st==='awaiting_human'||st==='needs_review');
+  const cfgLabels = {overview:'Definition',steps:'Steps',policies:'Policies',tools:'Tools',improve:'Improvement'};
+  const opLabels = {monitor:'Overview',execute:'Execute',improve:'Improve'};
+  const crumbLast = active==='setup' ? (cfgLabels[section]||'Configure') : (opLabels[active]||'Overview');
+%>
+<!-- ── Global topbar (tenant = Organization) ─────────────── -->
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Mission Control</small></span></a>
+  <div class="orgsel" title="Organization (tenant)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M19 21V11a2 2 0 0 0-2-2h-2"/><path d="M9 7h2M9 11h2M9 15h2"/></svg>
+    <select aria-label="Organization" disabled><option><%= proc.org.name %></option></select>
+  </div>
+  <a class="navlink" href="/registry">Tools Registry</a>
+  <div class="grow"></div>
+  <% if(needsYou){ %>
+    <span class="statuspill attention"><span class="dot"></span>Needs you</span>
+  <% } else if(st==='posted'){ %>
+    <span class="statuspill posted"><span class="dot"></span>Posted<%= frozen?' · frozen':'' %></span>
+  <% } else { %>
+    <span class="statuspill live"><span class="dot"></span>Running unattended</span>
+  <% } %>
+  <%- include('partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<!-- ── Process sub-header (builder-style) ────────────────── -->
+<div class="wsub"><div class="row">
+  <a class="wsub-back" href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Processes</a>
+  <span class="wsub-sep"></span>
+  <span class="wsub-tile <%= runnable?'bound':'defined' %>"><%= proc.name.slice(0,1).toUpperCase() %></span>
+  <div class="wsub-id">
+    <h1><%= proc.name %></h1>
+    <p><%= proc.function?proc.function.name:'Finance' %> &middot; <span style="text-transform:capitalize"><%= proc.frequency %> &middot; <%= proc.mode %></span> &middot; <span class="wsub-crumb"><%= crumbLast %></span></p>
+  </div>
+  <div class="grow"></div>
+  <% if(runs && runs.length && active!=='setup'){ %>
+  <div class="runsel">
+    <form method="GET" action="/process/<%= proc.slug %>/<%= active %>" id="runform">
+      <select name="run" onchange="document.getElementById('runform').submit()">
+        <% runs.forEach(function(r){ %>
+          <option value="<%= r.id %>" <%= run&&r.id===run.id?'selected':'' %>><%= r.period %> · <%= r.status %> · <%= fmt0(r.totalAccrual) %></option>
+        <% }) %>
+      </select>
+    </form>
+  </div>
+  <% } %>
+  <% if(ownerAgent){ %>
+  <button class="wsub-agent" type="button" onclick="openAgentDock()" title="Talk to the Process Owner Agent">
+    <span class="wsub-agent-av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg></span>
+    <span class="wsub-agent-txt"><small>Supervised by</small><b><%= ownerAgent.name %></b></span>
+  </button>
+  <% } %>
+  <span class="wsub-badge <%= runnable?'bound':'defined' %>"><span class="d"></span><%= runnable?'Engine-bound':'Defined' %></span>
+</div></div>
+
+<div class="wshell <%= active==='setup'?'cfg':'' %>">
+  <%- include('fos/worknav', {proc,active,section,runnable,run,needsYou}) %>
+  <div class="main">
+  <% if(active==='setup'){ %>
+    <%- include('fos/setup', {proc,section,fmt0,runnable,allTools,subfunctions,orgUnits}) %>
+  <% } else if(!run && runnable){ %>
+    <div class="card pad" style="text-align:center;padding:50px">
+      <div class="eyebrow">No runs yet</div>
+      <h1 style="margin:10px 0 6px;font-size:24px">Run the <%= proc.name %></h1>
+      <p style="color:var(--ink-2);max-width:48ch;margin:0 auto 20px">Estimate April freight expense from shipment activity and the carrier rate cards.</p>
+      <form method="POST" action="/process/<%= proc.slug %>/run"><button class="btn primary">Run accrual for April 2026</button></form>
+    </div>
+  <% } else if(!run){ %>
+    <div class="card pad" style="text-align:center;padding:50px">
+      <div class="eyebrow">Defined &middot; awaiting engine binding</div>
+      <h1 style="margin:10px 0 6px;font-size:24px"><%= proc.name %></h1>
+      <p style="color:var(--ink-2);max-width:54ch;margin:0 auto 20px">This process is defined on the Finance OS model with its steps and versioned policies. It will execute runs once an estimation engine is bound to it. The freight accrual is the first engine-bound process; this one shares the same Process / Step / Policy spine.</p>
+      <a class="btn" href="/process/<%= proc.slug %>/setup">View its definition &rarr;</a>
+    </div>
+  <% } else if(active==='monitor'){ %>
+    <%- include('fos/monitor', {s,carriers,ctrl,queue,run,summary,proc,frozen,st,heroState,heroLabel,heroTitle,runTime,fmt0,fmt2,signed,pct,decLabel,band}) %>
+  <% } else if(active==='execute'){ %>
+    <%- include('fos/execute', {run,proc,fmt0,fmt2}) %>
+  <% } else { %>
+    <%- include('fos/improve', {s,learn,carriers,proc,fmt0,fmt2,signed,pct,run,proposals,versions}) %>
+  <% } %>
+  </div>
+
+  <!-- ── Event ledger rail ─────────────────────────────── -->
+  <% if(active!=='setup'){ %>
+  <aside class="rail">
+    <div class="card ledger">
+      <div class="card-h"><h3>Event Ledger</h3><span class="sub">system of record</span></div>
+      <div style="max-height:560px;overflow:auto">
+        <% if(run && run.events){ run.events.forEach(function(e){ %>
+          <div class="ev">
+            <span class="tk <%= evPlane(e.action) %>"><%= (e.detail&&e.detail.tag)? e.detail.tag.toUpperCase() : e.action.slice(0,4) %></span>
+            <div class="em"><b><%= e.action.replace(/_/g,' ') %></b><%= (e.detail&&e.detail.message)||'' %>
+              <div class="et"><%= e.actor %> · <%= new Date(e.createdAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'}) %></div>
+            </div>
+          </div>
+        <% }) } %>
+      </div>
+    </div>
+    <div class="note-card">
+      <b>Deterministic by default, agentic by exception.</b><br>
+      The routine auto-posts. Only the exceptions wait for you. Every number above traces to a rate card, a policy, or a learned factor.
+    </div>
+  </aside>
+  <% } %>
+</div>
+<% if(ownerAgent){ %>
+<!-- ── Process Owner Agent — live supervisor chat dock ───────────────── -->
+<button class="agent-fab" type="button" onclick="openAgentDock()" aria-label="Open the Process Owner Agent">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="16" y1="16" x2="16.01" y2="16"/></svg>
+  <span>Ask the agent</span>
+</button>
+
+<div class="agent-dock" id="agentDock" aria-hidden="true">
+  <div class="ad-head">
+    <div class="ad-id">
+      <span class="ad-av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="16" y1="16" x2="16.01" y2="16"/></svg></span>
+      <div><b><%= ownerAgent.name %></b><small>Supervisor &middot; reads live run state</small></div>
+    </div>
+    <button class="ad-x" type="button" onclick="closeAgentDock()" aria-label="Close">&times;</button>
+  </div>
+  <div class="ad-body" id="adBody">
+    <div class="ad-intro">
+      <p>I supervise the <b><%= proc.name %></b>. Ask me about the current run, the variance vs Denise, why a carrier escalated, or tell me to trigger or sign off a run.</p>
+      <div class="ad-sugg">
+        <button type="button" onclick="adSuggest(this)">What is the status of the latest run?</button>
+        <button type="button" onclick="adSuggest(this)">Why did we beat Denise?</button>
+        <button type="button" onclick="adSuggest(this)">Explain the biggest exception.</button>
+      </div>
+    </div>
+  </div>
+  <form class="ad-input" id="adForm" onsubmit="return adSend(event)">
+    <input type="text" id="adText" placeholder="Ask the Process Owner Agent..." autocomplete="off">
+    <button type="submit" id="adSendBtn" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+  </form>
+</div>
+
+<script>
+(function(){
+  var AGENT_ID = <%- JSON.stringify(ownerAgent.id) %>;
+  var convId = null, busy = false;
+  var dock = document.getElementById('agentDock');
+  var body = document.getElementById('adBody');
+
+  window.openAgentDock = function(){ dock.classList.add('open'); dock.setAttribute('aria-hidden','false'); document.body.classList.add('dock-open'); setTimeout(function(){ var t=document.getElementById('adText'); if(t) t.focus(); }, 60); };
+  window.closeAgentDock = function(){ dock.classList.remove('open'); dock.setAttribute('aria-hidden','true'); document.body.classList.remove('dock-open'); };
+  window.adSuggest = function(b){ document.getElementById('adText').value = b.textContent; document.getElementById('adText').focus(); };
+
+  function bubble(role){
+    var d = document.createElement('div');
+    d.className = 'ad-msg ' + role;
+    body.appendChild(d);
+    body.scrollTop = body.scrollHeight;
+    return d;
+  }
+  function toolChip(name){
+    var c = document.createElement('div');
+    c.className = 'ad-tool';
+    c.textContent = 'called ' + name;
+    body.appendChild(c);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  async function ensureConv(){
+    if (convId) return convId;
+    var r = await fetch('/api/chat/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ agentId: AGENT_ID }) });
+    var j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'could not start conversation');
+    convId = j.data.conversationId;
+    return convId;
+  }
+
+  window.adSend = function(ev){
+    ev.preventDefault();
+    if (busy) return false;
+    var input = document.getElementById('adText');
+    var text = (input.value || '').trim();
+    if (!text) return false;
+    var intro = body.querySelector('.ad-intro'); if (intro) intro.remove();
+    input.value = '';
+    busy = true;
+    document.getElementById('adSendBtn').disabled = true;
+    bubble('user').textContent = text;
+    var out = bubble('bot');
+    out.innerHTML = '<span class="ad-typing"><i></i><i></i><i></i></span>';
+    var acc = '';
+
+    ensureConv().then(function(cid){
+      return fetch('/api/chat/' + cid + '/stream', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: text }) });
+    }).then(function(resp){
+      var reader = resp.body.getReader();
+      var dec = new TextDecoder();
+      var buf = '';
+      function pump(){
+        return reader.read().then(function(res){
+          if (res.done) { finish(); return; }
+          buf += dec.decode(res.value, { stream:true });
+          var parts = buf.split('\n\n');
+          buf = parts.pop();
+          parts.forEach(function(block){
+            var ev = 'message', data = '';
+            block.split('\n').forEach(function(line){
+              if (line.indexOf('event:') === 0) ev = line.slice(6).trim();
+              else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
+            });
+            if (!data) return;
+            var d; try { d = JSON.parse(data); } catch(e){ return; }
+            if (ev === 'delta' && d.content){ acc += d.content; render(); }
+            else if (ev === 'tool' && d.data){ var nm = (d.data.name || d.data.tool || (typeof d.data==='string'?d.data:'tool')); toolChip(nm); }
+            else if (ev === 'error'){ acc += '\n\n_' + (d.message||'error') + '_'; render(); }
+          });
+          return pump();
+        });
+      }
+      function render(){ out.innerHTML = mdLite(acc); body.scrollTop = body.scrollHeight; }
+      function finish(){ if(!acc) out.innerHTML = '<span style="color:var(--ink-3)">No response.</span>'; busy=false; document.getElementById('adSendBtn').disabled=false; input.focus(); }
+      return pump();
+    }).catch(function(e){
+      out.innerHTML = '<span style="color:var(--bad)">' + (e.message||'Request failed') + '</span>';
+      busy=false; document.getElementById('adSendBtn').disabled=false;
+    });
+    return false;
+  };
+
+  function mdLite(t){
+    var esc = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    esc = esc.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\*(.+?)\*/g,'<i>$1</i>').replace(/`(.+?)`/g,'<code>$1</code>');
+    return esc.replace(/\n/g,'<br>');
+  }
+})();
+</script>
+<% } %>
+<script src="/js/theme.js"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+  <style>
+    /* Live Map — scoped. Inherits fos.css theme tokens (--bg/--ink/--accent/...). */
+    body.livemap { overflow: hidden; height: 100vh; }
+    #lm-stage { position: fixed; top: 56px; left: 0; right: 0; bottom: 0; overflow: hidden; cursor: grab;
+      background-image: radial-gradient(circle, var(--dot) 1px, transparent 1px); background-size: 28px 28px; }
+    #lm-stage.grabbing { cursor: grabbing; }
+    #lm-svg { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+    .lm-edge { fill: none; stroke: var(--line-strong); stroke-width: 1.6; opacity: .5; }
+    .lm-edge.live { stroke: var(--accent); opacity: .8; }
+    .lm-edge.attention { stroke: var(--warn); opacity: .8; }
+    .lm-edge.posted { stroke: var(--good); opacity: .7; }
+    .lm-node { cursor: pointer; }
+    .lm-box { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.4; rx: 12; }
+    .lm-node.process .lm-box { stroke-width: 1.6; }
+    .lm-node.idle .lm-box { stroke: var(--line-strong); }
+    .lm-node.live .lm-box { stroke: var(--accent); }
+    .lm-node.attention .lm-box { stroke: var(--warn); }
+    .lm-node.posted .lm-box { stroke: var(--good); }
+    .lm-node.org .lm-box { fill: var(--panel-2); stroke: var(--accent); }
+    .lm-node.agent .lm-box { fill: var(--violet-soft); stroke: var(--violet); }
+    .lm-title { font-family: var(--sans); font-weight: 700; fill: var(--ink); }
+    .lm-sub { font-family: var(--mono); fill: var(--muted); }
+    .lm-tag { font-family: var(--mono); font-weight: 600; }
+    .lm-node:hover .lm-box { filter: drop-shadow(0 0 10px var(--glow)); }
+    .lm-glyph { font-family: var(--sans); font-weight: 800; }
+    /* status dot pulse */
+    @keyframes lmpulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .lm-dot.attention, .lm-dot.live { animation: lmpulse 1.6s ease-in-out infinite; }
+
+    .lm-toolbar { position: fixed; bottom: 18px; left: 18px; display: flex; gap: 6px; z-index: 20; }
+    .lm-tbtn { width: 36px; height: 36px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line-strong);
+      color: var(--ink-2); cursor: pointer; font-family: var(--mono); font-size: 15px; font-weight: 600; box-shadow: var(--shadow); }
+    .lm-tbtn:hover { color: var(--accent); border-color: var(--accent); }
+    .lm-legend { position: fixed; bottom: 18px; right: 18px; display: flex; gap: 14px; z-index: 20; padding: 9px 14px;
+      border-radius: 11px; background: var(--topbar-bg); backdrop-filter: blur(12px); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .lm-li { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+    .lm-sw { width: 10px; height: 10px; border-radius: 3px; }
+
+    .viewtoggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; }
+    .viewtoggle a { padding: 6px 14px; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-2);
+      text-decoration: none; display: flex; align-items: center; gap: 6px; }
+    .viewtoggle a.on { background: var(--accent-soft); color: var(--accent-ink); }
+    .viewtoggle a + a { border-left: 1px solid var(--line-strong); }
+    .viewtoggle svg { width: 14px; height: 14px; }
+  </style>
+</head>
+<body class="livemap">
+
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Live Map</small></span></a>
+  <div class="viewtoggle">
+    <a href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Grid</a>
+    <a href="/processes/live" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></svg>Live Map</a>
+  </div>
+  <div class="grow"></div>
+  <span class="statuspill live"><span class="dot"></span><%= counts.live %> running · <%= counts.attention %> need you · <%= counts.posted %> posted</span>
+  <%- include('partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div id="lm-stage"><svg id="lm-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+
+<div class="lm-toolbar">
+  <button class="lm-tbtn" onclick="lmZoom(1.2)">+</button>
+  <button class="lm-tbtn" onclick="lmZoom(0.83)">&minus;</button>
+  <button class="lm-tbtn" style="font-size:10px" onclick="lmFit()">FIT</button>
+</div>
+<div class="lm-legend">
+  <span class="lm-li"><span class="lm-sw" style="background:var(--accent)"></span>Running</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--warn)"></span>Needs you</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--good)"></span>Posted</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--muted)"></span>Idle</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--violet)"></span>Agent</span>
+</div>
+
+<script>window.LM_GRAPH = <%- JSON.stringify(graph) %>;</script>
+<script src="/js/processes-live.js?v=1"></script>
+<script src="/js/theme.js"></script>
+</body>
+</html>

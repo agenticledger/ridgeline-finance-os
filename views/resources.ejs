@@ -1,0 +1,63 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<main class="page-content">
+  <section class="hero" style="padding-bottom:60px;">
+    <div class="container">
+      <div class="hero-content fade-in">
+        <span class="overline">Resources</span>
+        <h1>Open resources for <span class="accent">finance AI</span></h1>
+        <p class="lead">Community, knowledge, and original thinking — free and open for finance professionals navigating AI.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <div class="card-grid-3">
+        <!-- finney.finance -->
+        <div class="card">
+          <div class="card-icon">&#128218;</div>
+          <h3>finney.finance</h3>
+          <p>The Finance AI One-Stop Shop. An open-source, community-driven knowledge base for finance professionals.</p>
+          <ul style="list-style:none;margin-top:16px;padding:0;">
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; <strong>Wiki</strong> — real-world AI applications across accounting, treasury, FP&A, tax, audit & risk</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; <strong>Pulse</strong> — curated news and research</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; <strong>Gym</strong> — practitioner-authored guides</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; <strong>Lab</strong> — prompts, skills, MCP servers, agents</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; <strong>Job Board</strong> — careers at the finance-AI intersection</li>
+          </ul>
+          <a href="<%= links.finney %>" class="btn btn-secondary" style="margin-top:20px;" target="_blank" rel="noopener">Visit finney.finance &rarr;</a>
+        </div>
+
+        <!-- Slack -->
+        <div class="card">
+          <div class="card-icon">&#128172;</div>
+          <h3>AI in Finance Slack</h3>
+          <p>A practitioner community for finance professionals building with AI.</p>
+          <ul style="list-style:none;margin-top:16px;padding:0;">
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; Finance leaders, controllers, CFOs, accountants, and consultants</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; Share what's working, ask questions, learn from peers</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; Early-mover, information-sharing philosophy</li>
+          </ul>
+          <a href="<%= links.slack %>" class="btn btn-secondary" style="margin-top:20px;" target="_blank" rel="noopener">Join the Community &rarr;</a>
+        </div>
+
+        <!-- Substack -->
+        <div class="card">
+          <div class="card-icon">&#9997;</div>
+          <h3>Substack</h3>
+          <p>Original writing on AI in finance, agentic systems, and the future of the finance function.</p>
+          <ul style="list-style:none;margin-top:16px;padding:0;">
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; Practical takes from the intersection of AI and finance</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; Written by Ore Phillips</li>
+            <li style="padding:4px 0;color:var(--text-secondary);font-size:0.9rem;">&#9670; Subscribe for updates</li>
+          </ul>
+          <a href="<%= links.substack %>" class="btn btn-secondary" style="margin-top:20px;" target="_blank" rel="noopener">Read on Substack &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Command Center</small></span></a>
+  <a class="navlink" href="/registry">Tools Registry</a>
+  <div class="grow"></div>
+  <span class="statuspill posted"><span class="dot"></span><%= count %> MCP tools</span>
+  <%- include('../partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div class="docwrap">
+  <aside class="docside">
+    <div class="ds-eyebrow">MCP Tools</div>
+    <a class="ds-link on" href="#overview">Overview</a>
+    <a class="ds-link" href="#connect">Connect</a>
+    <% groups.forEach(function(g){ %>
+      <a class="ds-link" href="#g-<%= g.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') %>"><%= g.name.split(' (')[0] %><span class="ds-n"><%= g.tools.length %></span></a>
+    <% }) %>
+  </aside>
+
+  <main class="docmain">
+    <section id="overview" class="doc-intro">
+      <div class="eyebrow">Agent tool surface</div>
+      <h1>MCP Documentation</h1>
+      <p class="lede"><%= count %> Model Context Protocol tools exposing the freight accrual loop to any MCP-capable agent (Claude Desktop, Claude Code, an external close orchestrator). The server runs over stdio and calls the validated engine and the persisted run model directly. For the broader REST surface, see the <a href="/docs/api">API docs</a>.</p>
+    </section>
+
+    <section id="connect" class="docgroup">
+      <div class="dg-head">
+        <h2>Connect</h2>
+        <p>Start the server over stdio and register it with your MCP client.</p>
+      </div>
+      <div class="ep-body" style="display:block;border:1px solid var(--line);border-radius:14px;padding:18px 20px">
+        <div class="ep-sec">Run the server</div>
+        <pre class="codeblk"><code>node mcp/server.js   # or: npm run mcp</code></pre>
+        <div class="ep-sec">Claude Desktop config</div>
+        <pre class="codeblk"><code>{
+  "mcpServers": {
+    "ridgeline": {
+      "command": "node",
+      "args": ["<%= cwd %>/mcp/server.js"]
+    }
+  }
+}</code></pre>
+        <p class="ep-returns">Every tool returns a JSON text payload. Read-only tools (estimate, price, list, get, reconcile, get_policies) are safe to call freely; write tools (run_accrual, sign_off, freeze_run, set_policy) change the system of record.</p>
+      </div>
+    </section>
+
+    <% groups.forEach(function(g){ var gid='g-'+g.name.toLowerCase().replace(/[^a-z0-9]+/g,'-'); %>
+      <section id="<%= gid %>" class="docgroup">
+        <div class="dg-head">
+          <h2><%= g.name %></h2>
+          <p><%= g.blurb %></p>
+        </div>
+        <% g.tools.forEach(function(t){ %>
+          <details class="ep">
+            <summary class="ep-head">
+              <span class="badge tool <%= t.sideEffect==='writes'?'writes':'reads' %>"><%= t.sideEffect==='writes'?'WRITES':'READ' %></span>
+              <span class="ep-path"><%= t.name %></span>
+              <span class="ep-sum"><%= t.title %></span>
+            </summary>
+            <div class="ep-body">
+              <p class="ep-returns"><%= t.description %></p>
+              <div class="ep-op">maps to: <code><%= t.mapsTo %></code></div>
+              <% if(t.args.length){ %>
+                <div class="ep-sec">Input</div>
+                <table class="ep-table">
+                  <thead><tr><th>Field</th><th>Type</th><th>Req</th><th>Default</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <% t.args.forEach(function(a){ %>
+                      <tr><td><code><%= a.name %></code></td><td><%= a.type %></td><td><%= a.required?'yes':'no' %></td><td><%= a.default===null?'\u2014':JSON.stringify(a.default) %></td><td><%= a.desc %></td></tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              <% } %>
+            </div>
+          </details>
+        <% }) %>
+      </section>
+    <% }) %>
+  </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script>
+(function(){
+  var links=[].slice.call(document.querySelectorAll('.docside .ds-link'));
+  var secs=links.map(function(l){return document.querySelector(l.getAttribute('href'));}).filter(Boolean);
+  function onScroll(){
+    var y=window.scrollY+120, cur=secs[0];
+    secs.forEach(function(s){ if(s && s.offsetTop<=y) cur=s; });
+    links.forEach(function(l){ l.classList.toggle('on', cur && l.getAttribute('href')==='#'+cur.id); });
+  }
+  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+})();
+</script>
+</body>
+</html>

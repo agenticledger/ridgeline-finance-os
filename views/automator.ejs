@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Mission Control</small></span></a>
+  <div class="orgsel" title="Organization (tenant)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M19 21V11a2 2 0 0 0-2-2h-2"/><path d="M9 7h2M9 11h2M9 15h2"/></svg>
+    <select aria-label="Organization" disabled><option><%= org && org.name ? org.name : org %></option></select>
+  </div>
+  <a class="navlink" href="/registry">Tools Registry</a>
+  <a class="navlink" href="/agents">Agents</a>
+  <div class="grow"></div>
+  <%- include('partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div class="wsub"><div class="row">
+  <a class="wsub-back" href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Processes</a>
+  <span class="wsub-sep"></span>
+  <span class="wsub-tile new">AI</span>
+  <div class="wsub-id">
+    <h1>Process Automator</h1>
+    <p>Describe a finance process, attach any source documents, and let AI draft the definition, steps, policies, and tools. Review, then apply.</p>
+  </div>
+</div></div>
+
+<div class="autowrap">
+  <!-- LEFT: chat -->
+  <section class="autochat">
+    <div class="auto-ctl">
+      <label class="auto-field">
+        <span class="auto-lab">Scope</span>
+        <select id="scope">
+          <option value="whole">Whole process</option>
+          <option value="definition">Definition only</option>
+          <option value="steps">Steps &amp; engines</option>
+          <option value="policies">Policies</option>
+          <option value="tools">Tools</option>
+        </select>
+      </label>
+      <label class="auto-field">
+        <span class="auto-lab">Apply to</span>
+        <select id="target">
+          <option value="">New process</option>
+          <% processes.forEach(function(p){ %>
+            <option value="<%= p.slug %>" <%= targetSlug===p.slug?'selected':'' %>><%= p.name %></option>
+          <% }); %>
+        </select>
+      </label>
+      <button type="button" class="btn ghost auto-attach" id="attachBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        Attach docs
+      </button>
+      <input type="file" id="fileInput" multiple accept=".txt,.md,.csv,.json,.text" hidden>
+    </div>
+    <div class="auto-chips" id="chips"></div>
+
+    <div class="auto-thread" id="thread">
+      <div class="auto-msg bot">
+        <div class="auto-bubble">
+          Tell me the process you want to build. Paste the whole case if you like, or attach the source documents. For example: "Build the freight accrual process for Ridgeline Foods" or "Set up a monthly rebate accrual that books to 5400 / 2200 and escalates anything over $2,000."
+        </div>
+      </div>
+    </div>
+
+    <form class="auto-composer" id="composer">
+      <textarea id="input" rows="3" placeholder="Describe the process, ask for changes, or answer my questions..."></textarea>
+      <button class="btn primary" type="submit" id="sendBtn">Send</button>
+    </form>
+  </section>
+
+  <!-- RIGHT: blueprint preview -->
+  <aside class="autopreview" id="preview">
+    <div class="auto-empty" id="previewEmpty">
+      <div class="ae-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
+      <p>The proposed blueprint will appear here once I have enough to draft it. You can keep refining it in the chat before applying.</p>
+    </div>
+    <div id="previewBody" hidden></div>
+    <div class="auto-applybar" id="applyBar" hidden>
+      <button class="btn primary" id="applyBtn" type="button">Apply blueprint</button>
+      <span class="auto-applynote" id="applyNote"></span>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function(){
+  var thread=document.getElementById('thread');
+  var composer=document.getElementById('composer');
+  var input=document.getElementById('input');
+  var sendBtn=document.getElementById('sendBtn');
+  var scopeSel=document.getElementById('scope');
+  var targetSel=document.getElementById('target');
+  var chips=document.getElementById('chips');
+  var attachBtn=document.getElementById('attachBtn');
+  var fileInput=document.getElementById('fileInput');
+  var previewEmpty=document.getElementById('previewEmpty');
+  var previewBody=document.getElementById('previewBody');
+  var applyBar=document.getElementById('applyBar');
+  var applyBtn=document.getElementById('applyBtn');
+  var applyNote=document.getElementById('applyNote');
+
+  var messages=[];          // {role, content}
+  var attachments=[];       // {name, text}
+  var blueprint=null;
+
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+  function addMsg(role,text){
+    var wrap=document.createElement('div');
+    wrap.className='auto-msg '+(role==='user'?'me':'bot');
+    var b=document.createElement('div'); b.className='auto-bubble'; b.textContent=text;
+    wrap.appendChild(b); thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
+    return wrap;
+  }
+
+  function renderChips(){
+    chips.innerHTML='';
+    attachments.forEach(function(a,i){
+      var c=document.createElement('span'); c.className='auto-chip';
+      c.innerHTML=esc(a.name)+' <button data-i="'+i+'" aria-label="remove">&times;</button>';
+      chips.appendChild(c);
+    });
+    chips.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click',function(){attachments.splice(+btn.dataset.i,1);renderChips();});
+    });
+  }
+
+  attachBtn.addEventListener('click',function(){fileInput.click();});
+  fileInput.addEventListener('change',function(){
+    [].slice.call(fileInput.files).forEach(function(f){
+      var r=new FileReader();
+      r.onload=function(){attachments.push({name:f.name,text:String(r.result).slice(0,200000)});renderChips();};
+      r.readAsText(f);
+    });
+    fileInput.value='';
+  });
+
+  function badge(t){return '<span class="bp-badge '+t+'">'+t.replace('_',' ')+'</span>';}
+
+  function renderPreview(bp){
+    if(!bp){previewEmpty.hidden=false;previewBody.hidden=true;applyBar.hidden=true;return;}
+    previewEmpty.hidden=true;previewBody.hidden=false;applyBar.hidden=false;
+    var h='';
+    if(bp.definition){
+      var d=bp.definition;
+      h+='<div class="bp-sec"><h3>Definition</h3><div class="bp-def">'+
+         '<div class="bp-name">'+esc(d.name||'(unnamed)')+'</div>'+
+         '<div class="bp-meta">'+esc(d.frequency||'monthly')+' &middot; '+esc(d.mode||'manual')+(d.functionSlug?(' &middot; '+esc(d.functionSlug)):'')+'</div>'+
+         (d.description?'<p class="bp-desc">'+esc(d.description)+'</p>':'')+'</div></div>';
+    }
+    if(bp.steps&&bp.steps.length){
+      h+='<div class="bp-sec"><h3>Steps <span class="bp-n">'+bp.steps.length+'</span></h3><ol class="bp-steps">';
+      bp.steps.forEach(function(s){
+        h+='<li><div class="bp-srow"><b>'+esc(s.name)+'</b> '+badge(s.decisionType||'policy_based')+
+           (s.isGate?' <span class="bp-badge gate">gate</span>':'')+(s.pauseAfter?' <span class="bp-badge pause">pause</span>':'')+'</div>'+
+           (s.description?'<p>'+esc(s.description)+'</p>':'')+'</li>';
+      });
+      h+='</ol></div>';
+    }
+    if(bp.policies&&bp.policies.length){
+      h+='<div class="bp-sec"><h3>Policies <span class="bp-n">'+bp.policies.length+'</span></h3>';
+      bp.policies.forEach(function(p){
+        h+='<div class="bp-pol"><b>'+esc(p.name)+'</b>'+(p.definition?'<p>'+esc(p.definition)+'</p>':'');
+        var keys=p.params?Object.keys(p.params):[];
+        if(keys.length){h+='<div class="bp-params">';keys.forEach(function(k){h+='<span class="bp-param"><i>'+esc(k)+'</i> '+esc(String(p.params[k]))+'</span>';});h+='</div>';}
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    if(bp.tools&&bp.tools.length){
+      h+='<div class="bp-sec"><h3>Tools <span class="bp-n">'+bp.tools.length+'</span></h3><div class="bp-tools">';
+      bp.tools.forEach(function(t){h+='<span class="bp-tool">'+esc(t.slug)+(t.role?(' &middot; '+esc(t.role)):'')+'</span>';});
+      h+='</div></div>';
+    }
+    if(bp.improve){h+='<div class="bp-sec"><h3>Improve</h3><div class="bp-def"><div class="bp-meta">'+esc(bp.improve.mode)+' &middot; last '+esc(String(bp.improve.lookbackRuns))+' runs</div></div></div>';}
+    previewBody.innerHTML=h;
+    applyNote.textContent = targetSel.value ? ('Will update "'+targetSel.options[targetSel.selectedIndex].text+'".') : 'Will create a new process.';
+  }
+
+  function setBusy(b){sendBtn.disabled=b;sendBtn.textContent=b?'Thinking...':'Send';}
+
+  composer.addEventListener('submit',function(e){
+    e.preventDefault();
+    var text=input.value.trim();
+    if(!text&&!attachments.length)return;
+    if(text){addMsg('user',text);messages.push({role:'user',content:text});}
+    else{addMsg('user','(attached '+attachments.length+' document'+(attachments.length>1?'s':'')+')');messages.push({role:'user',content:'See attached documents.'});}
+    input.value='';
+    var sentAttach=attachments.slice();attachments=[];renderChips();
+    setBusy(true);
+    fetch('/api/automator/propose',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:messages,scope:scopeSel.value,attachments:sentAttach})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        setBusy(false);
+        if(!j.ok){addMsg('bot','Error: '+(j.error||'request failed'));return;}
+        var d=j.data;
+        addMsg('bot',d.message||'(no message)');
+        messages.push({role:'assistant',content:d.message||''});
+        if(d.ready&&d.blueprint){blueprint=d.blueprint;renderPreview(blueprint);}
+      })
+      .catch(function(err){setBusy(false);addMsg('bot','Network error: '+err.message);});
+  });
+
+  targetSel.addEventListener('change',function(){if(blueprint)renderPreview(blueprint);});
+
+  applyBtn.addEventListener('click',function(){
+    if(!blueprint)return;
+    applyBtn.disabled=true;applyBtn.textContent='Applying...';
+    fetch('/api/automator/apply',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({blueprint:blueprint,slug:targetSel.value||null})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j.ok){applyBtn.disabled=false;applyBtn.textContent='Apply blueprint';applyNote.textContent='Error: '+(j.error||'apply failed');return;}
+        window.location.href='/process/'+j.data.slug+'/setup';
+      })
+      .catch(function(err){applyBtn.disabled=false;applyBtn.textContent='Apply blueprint';applyNote.textContent='Network error: '+err.message;});
+  });
+})();
+</script>
+<script src="/js/theme.js"></script>
+</body>
+</html>

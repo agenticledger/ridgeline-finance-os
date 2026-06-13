@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Command Center</small></span></a>
+  <a class="navlink" href="/registry">Tools Registry</a>
+  <div class="grow"></div>
+  <span class="statuspill posted"><span class="dot"></span><%= count %> endpoints</span>
+  <%- include('../partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div class="docwrap">
+  <aside class="docside">
+    <div class="ds-eyebrow">REST API</div>
+    <a class="ds-link on" href="#overview">Overview</a>
+    <% groups.forEach(function(g){ %>
+      <a class="ds-link" href="#g-<%= g.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') %>"><%= g.name %><span class="ds-n"><%= g.endpoints.length %></span></a>
+    <% }) %>
+  </aside>
+
+  <main class="docmain">
+    <section id="overview" class="doc-intro">
+      <div class="eyebrow">Agent-ready surface</div>
+      <h1>API Documentation</h1>
+      <p class="lede"><%= count %> REST endpoints across <%= groups.length %> groups. JSON in, JSON out: success is <code>{ ok: true, data }</code>, failure is <code>{ ok: false, error }</code>. The freight accrual domain is also exposed as a curated MCP toolset for agents &mdash; see the <a href="/docs/mcp">MCP docs</a>.</p>
+      <div class="doc-auth">
+        <h3>Authentication</h3>
+        <p>Public endpoints need no auth. Admin endpoints require a session token: POST your password to <code>/api/admin/login</code>, then send the returned token as the <code>X-Admin-Key</code> header on every admin call.</p>
+        <pre class="codeblk"><code>curl -s -X POST <%= baseUrl %>/api/admin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"password":"admin123"}'
+# -> { "ok": true, "data": { "token": "..." } }
+# then: -H 'X-Admin-Key: &lt;token&gt;'</code></pre>
+      </div>
+    </section>
+
+    <% groups.forEach(function(g){ var gid='g-'+g.name.toLowerCase().replace(/[^a-z0-9]+/g,'-'); %>
+      <section id="<%= gid %>" class="docgroup">
+        <div class="dg-head">
+          <h2><%= g.name %> <span class="dg-base"><%= g.base %></span></h2>
+          <p><%= g.blurb %></p>
+        </div>
+        <% g.endpoints.forEach(function(e){ var m=e.method.toLowerCase(); %>
+          <details class="ep">
+            <summary class="ep-head">
+              <span class="badge method <%= m %>"><%= e.method %></span>
+              <span class="ep-path"><%= e.path %></span>
+              <% if(e.auth==='admin'){ %><span class="ep-lock" title="Requires X-Admin-Key">admin</span><% } %>
+              <span class="ep-sum"><%= e.summary %></span>
+            </summary>
+            <div class="ep-body">
+              <div class="ep-op">operationId: <code><%= e.op %></code></div>
+              <% if(e.params.length){ %>
+                <div class="ep-sec">Path & query parameters</div>
+                <table class="ep-table">
+                  <thead><tr><th>Name</th><th>In</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <% e.params.forEach(function(p){ %>
+                      <tr><td><code><%= p.name %></code></td><td><%= p.in %></td><td><%= p.type %></td><td><%= p.required?'yes':'no' %></td><td><%= p.desc %></td></tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              <% } %>
+              <% if(e.body.length){ %>
+                <div class="ep-sec">Request body (JSON)</div>
+                <table class="ep-table">
+                  <thead><tr><th>Field</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <% e.body.forEach(function(b){ %>
+                      <tr><td><code><%= b.name %></code></td><td><%= b.type %></td><td><%= b.required?'yes':'no' %></td><td><%= b.desc %></td></tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              <% } %>
+              <div class="ep-sec">Returns</div>
+              <p class="ep-returns"><%= e.returns %></p>
+              <div class="ep-sec">Example</div>
+              <pre class="codeblk"><code><%= curlFor(e, baseUrl) %></code></pre>
+            </div>
+          </details>
+        <% }) %>
+      </section>
+    <% }) %>
+  </main>
+</div>
+
+<script src="/js/theme.js"></script>
+<script>
+(function(){
+  var links=[].slice.call(document.querySelectorAll('.docside .ds-link'));
+  var secs=links.map(function(l){return document.querySelector(l.getAttribute('href'));}).filter(Boolean);
+  function onScroll(){
+    var y=window.scrollY+120, cur=secs[0];
+    secs.forEach(function(s){ if(s && s.offsetTop<=y) cur=s; });
+    links.forEach(function(l){ l.classList.toggle('on', cur && l.getAttribute('href')==='#'+cur.id); });
+  }
+  window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+})();
+</script>
+</body>
+</html>

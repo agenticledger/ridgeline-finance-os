@@ -1,0 +1,31 @@
+<nav class="nav" role="navigation" aria-label="Main navigation">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="Orphil Home">
+      <img src="/images/logo-full.svg" alt="Orphil Advisory — AI Transformation Partner" class="brand-logo" height="40">
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="/services" <% if (canonicalUrl === '/services') { %>class="active"<% } %>>Services</a></li>
+      <li><a href="/product" <% if (canonicalUrl === '/product') { %>class="active"<% } %>>Product</a></li>
+      <li><a href="/resources" <% if (canonicalUrl === '/resources') { %>class="active"<% } %>>Resources</a></li>
+      <li><a href="/chat" <% if (canonicalUrl === '/chat') { %>class="active"<% } %>>Agent Chat</a></li>
+      <li><a href="/about" <% if (canonicalUrl === '/about') { %>class="active"<% } %>>About</a></li>
+    </ul>
+
+    <a href="/contact" class="nav-cta nav-cta-desktop">Let's Talk</a>
+
+    <button class="nav-toggle" onclick="toggleNav()" aria-label="Toggle menu" aria-expanded="false">
+      <span id="nav-icon">&#9776;</span>
+    </button>
+  </div>
+</nav>
+
+<div class="nav-mobile" id="mobile-nav" role="navigation" aria-label="Mobile navigation">
+  <a href="/" <% if (canonicalUrl === '/') { %>class="active"<% } %>>Home</a>
+  <a href="/services" <% if (canonicalUrl === '/services') { %>class="active"<% } %>>Services</a>
+  <a href="/product" <% if (canonicalUrl === '/product') { %>class="active"<% } %>>Product</a>
+  <a href="/resources" <% if (canonicalUrl === '/resources') { %>class="active"<% } %>>Resources</a>
+  <a href="/chat" <% if (canonicalUrl === '/chat') { %>class="active"<% } %>>Agent Chat</a>
+  <a href="/about" <% if (canonicalUrl === '/about') { %>class="active"<% } %>>About</a>
+  <a href="/contact" <% if (canonicalUrl === '/contact') { %>class="active"<% } %>>Contact</a>
+</div>

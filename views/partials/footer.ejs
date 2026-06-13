@@ -1,0 +1,58 @@
+<footer class="footer" role="contentinfo">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="/" class="nav-brand">
+        <img src="/images/logo-full.svg" alt="Orphil Advisory — AI Transformation Partner" class="brand-logo" height="40">
+      </a>
+      <p>AI Transformation Partner for Finance, Accounting & Consulting Firms.</p>
+    </div>
+
+    <div class="footer-col">
+      <h4>Services</h4>
+      <ul>
+        <li><a href="/services#strategy">Strategy & Planning</a></li>
+        <li><a href="/services#advisory">Advisory</a></li>
+        <li><a href="/services#execution">Execution</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col">
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="<%= links.finney %>" target="_blank" rel="noopener">finney.finance</a></li>
+        <li><a href="<%= links.substack %>" target="_blank" rel="noopener">Substack</a></li>
+        <li><a href="<%= links.myaiforone %>" target="_blank" rel="noopener">myaiforone</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col">
+      <h4>Company</h4>
+      <ul>
+        <li><a href="/about">About</a></li>
+        <li><a href="/contact">Contact</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <a href="/admin" class="footer-shield" aria-label="Site status" title=""></a>
+    <span>&copy; <%= year %> Ore Phillips Advisory (dba <%= legalName %>). All rights reserved.</span>
+  </div>
+</footer>
+
+<!-- Floating Chat Widget -->
+<link rel="stylesheet" href="/css/chat-widget.css">
+<script src="/js/chat-widget.js" defer></script>
+
+<script>
+  function toggleNav() {
+    const nav = document.getElementById('mobile-nav');
+    const icon = document.getElementById('nav-icon');
+    const toggle = document.querySelector('.nav-toggle');
+    const isOpen = nav.classList.toggle('open');
+    icon.innerHTML = isOpen ? '&#10005;' : '&#9776;';
+    toggle.setAttribute('aria-expanded', isOpen);
+  }
+</script>
+</body>
+</html>

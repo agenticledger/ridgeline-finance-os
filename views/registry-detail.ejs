@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+<%
+  const tic = {
+    automation:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    skill:'<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>',
+    agent:'<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/>',
+    prompt:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    mcp:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'
+  };
+  // De-dupe processes that use this tool (a tool can appear via ProcessTool and via steps).
+  const procMap = {};
+  (tool.processTools||[]).forEach(function(pt){ if(pt.process){ procMap[pt.process.id]=procMap[pt.process.id]||{p:pt.process,role:pt.role,steps:[]}; } });
+  (tool.steps||[]).forEach(function(s){ if(s.process){ const e=procMap[s.process.id]=procMap[s.process.id]||{p:s.process,role:null,steps:[]}; e.steps.push(s.name); } });
+  const usedBy = Object.keys(procMap).map(function(k){return procMap[k];});
+  const cfg = tool.config && Object.keys(tool.config).length ? tool.config : null;
+%>
+
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Command Center</small></span></a>
+  <a class="navlink on" href="/registry">Tools Registry</a>
+  <div class="grow"></div>
+  <%- include('partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div class="wsub"><div class="row">
+  <a class="wsub-back" href="/registry"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>Tools Registry</a>
+  <span class="wsub-sep"></span>
+  <span class="rc-ic <%= tool.type %>" style="width:34px;height:34px;border-radius:9px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><%- tic[tool.type] || tic.skill %></svg></span>
+  <div class="wsub-id">
+    <h1><%= tool.name %></h1>
+    <p><span class="rc-type <%= tool.type %>"><%= meta.label %></span> &middot; <span class="mono"><%= tool.slug %></span></p>
+  </div>
+</div></div>
+
+<div class="cmdwrap">
+  <div class="detgrid">
+    <div class="detmain">
+      <div class="card pad">
+        <div class="sec-head"><h2>What it is</h2></div>
+        <p style="color:var(--ink-2);margin:0 0 10px;font-size:14.5px;line-height:1.6"><%= tool.description || 'No description provided.' %></p>
+        <p style="color:var(--muted);margin:0;font-size:13px"><%= meta.blurb %></p>
+      </div>
+
+      <div class="card pad">
+        <div class="sec-head"><h2>Used by</h2><p><%= usedBy.length %> process<%= usedBy.length===1?'':'es' %> bind to this tool.</p></div>
+        <% if(usedBy.length){ %>
+          <div class="usedlist">
+            <% usedBy.forEach(function(u){ %>
+              <a class="usedrow" href="/process/<%= u.p.slug %>/setup?section=tools">
+                <span class="ur-glyph"><%= u.p.name.slice(0,1).toUpperCase() %></span>
+                <div class="ur-id">
+                  <b><%= u.p.name %></b>
+                  <span><%= u.p.function?u.p.function.name:'Finance' %><% if(u.role){ %> &middot; role: <%= u.role %><% } %><% if(u.steps.length){ %> &middot; <%= u.steps.join(', ') %><% } %></span>
+                </div>
+                <span class="ur-go">&rarr;</span>
+              </a>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <p style="color:var(--muted);margin:0">Not bound to any process yet.</p>
+        <% } %>
+      </div>
+
+      <% if(cfg){ %>
+      <div class="card pad">
+        <div class="sec-head"><h2>Configuration</h2><p>Declared config for this tool.</p></div>
+        <pre class="cfgblock"><%= JSON.stringify(cfg, null, 2) %></pre>
+      </div>
+      <% } %>
+    </div>
+
+    <aside class="detside">
+      <div class="card pad">
+        <div class="kvrow"><span>Type</span><b><%= meta.label %></b></div>
+        <div class="kvrow"><span>Slug</span><b class="mono"><%= tool.slug %></b></div>
+        <div class="kvrow"><span>Processes</span><b><%= usedBy.length %></b></div>
+        <div class="kvrow"><span>Steps bound</span><b><%= (tool.steps||[]).length %></b></div>
+      </div>
+      <div class="note-card">
+        <b>One inventory, reused everywhere.</b><br>
+        Tools are platform-wide. A process composes them onto its steps; the registry is the single source of truth for what each one does.
+      </div>
+    </aside>
+  </div>
+</div>
+<script src="/js/theme.js"></script>
+</body>
+</html>

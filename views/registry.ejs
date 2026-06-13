@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=15">
+</head>
+<body>
+<%
+  const tic = {
+    automation:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    skill:'<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>',
+    agent:'<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/>',
+    prompt:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    mcp:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'
+  };
+  const types = Object.keys(typeMeta);
+  const counts = {}; types.forEach(t=>counts[t]=0); tools.forEach(t=>{counts[t.type]=(counts[t.type]||0)+1;});
+%>
+
+<header class="topbar"><div class="row">
+  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Command Center</small></span></a>
+  <a class="navlink on" href="/registry">Tools Registry</a>
+  <div class="grow"></div>
+  <span class="statuspill posted"><span class="dot"></span><%= tools.length %> tools registered</span>
+  <%- include('partials/docsmenu') %>
+  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div></header>
+
+<div class="cmdwrap">
+  <div class="cmdhead">
+    <div>
+      <div class="eyebrow">Platform inventory</div>
+      <h1>Tools Registry</h1>
+      <p class="lede">Every <b>skill, agent, prompt, and integration</b> available to processes across the org. Steps bind to these; agents own and improve. One inventory, reused everywhere.</p>
+    </div>
+  </div>
+
+  <div class="regbar">
+    <div class="regsearch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="regq" placeholder="Search tools by name or description" autocomplete="off">
+    </div>
+    <div class="regchips">
+      <button class="regchip on" data-type="all">All <span><%= tools.length %></span></button>
+      <% types.forEach(function(t){ %>
+        <button class="regchip" data-type="<%= t %>"><%= typeMeta[t].label %> <span><%= counts[t]||0 %></span></button>
+      <% }) %>
+    </div>
+  </div>
+
+  <div class="reggrid" id="reggrid">
+    <% tools.forEach(function(t){ %>
+      <a class="regcard" href="/registry/<%= t.slug %>" data-type="<%= t.type %>" data-name="<%= (t.name+' '+(t.description||'')).toLowerCase() %>">
+        <div class="rc-top">
+          <span class="rc-ic <%= t.type %>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><%- tic[t.type] || tic.skill %></svg></span>
+          <span class="rc-type <%= t.type %>"><%= t.typeLabel %></span>
+        </div>
+        <div class="rc-name"><%= t.name %></div>
+        <div class="rc-slug"><%= t.slug %></div>
+        <div class="rc-desc"><%= t.description || 'No description.' %></div>
+        <div class="rc-meta">
+          <span><b><%= t.processCount %></b> process<%= t.processCount===1?'':'es' %></span>
+          <span><b><%= t.stepCount %></b> step<%= t.stepCount===1?'':'s' %></span>
+        </div>
+      </a>
+    <% }) %>
+  </div>
+  <div class="regempty" id="regempty" hidden>No tools match your search.</div>
+</div>
+
+<script>
+(function(){
+  var q=document.getElementById('regq'), grid=document.getElementById('reggrid'),
+      empty=document.getElementById('regempty'),
+      cards=[].slice.call(grid.querySelectorAll('.regcard')),
+      chips=[].slice.call(document.querySelectorAll('.regchip')),
+      type='all', term='';
+  function apply(){
+    var shown=0;
+    cards.forEach(function(c){
+      var okT = type==='all' || c.dataset.type===type;
+      var okQ = !term || c.dataset.name.indexOf(term)>-1;
+      var on = okT && okQ; c.hidden=!on; if(on) shown++;
+    });
+    empty.hidden = shown>0;
+  }
+  q.addEventListener('input',function(){term=q.value.trim().toLowerCase();apply();});
+  chips.forEach(function(ch){ch.addEventListener('click',function(){
+    chips.forEach(function(x){x.classList.remove('on');}); ch.classList.add('on');
+    type=ch.dataset.type; apply();
+  });});
+})();
+</script>
+<script src="/js/theme.js"></script>
+</body>
+</html>

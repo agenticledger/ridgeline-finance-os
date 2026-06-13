@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="author" content="<%= founder %>">
+  <meta name="robots" content="index, follow">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://orphiladvisory.com<%= canonicalUrl %>">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="<%= pageTitle %>">
+  <meta property="og:description" content="<%= pageDescription %>">
+  <meta property="og:site_name" content="<%= siteName %>">
+  <meta property="og:url" content="https://orphiladvisory.com<%= canonicalUrl %>">
+  <meta property="og:image" content="https://orphiladvisory.com/images/og-image.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<%= pageTitle %>">
+  <meta name="twitter:description" content="<%= pageDescription %>">
+  <meta name="twitter:image" content="https://orphiladvisory.com/images/og-image.png">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/css/styles.css">
+
+  <!-- Structured Data: Organization (every page) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ProfessionalService",
+    "name": "<%= siteTitle %>",
+    "alternateName": "<%= legalName %>",
+    "url": "https://orphiladvisory.com",
+    "logo": "https://orphiladvisory.com/images/og-image.png",
+    "description": "<%= tagline %>",
+    "founder": {
+      "@type": "Person",
+      "name": "<%= founder %>"
+    },
+    "knowsAbout": ["Artificial Intelligence", "Finance", "Accounting", "AI Transformation", "AI Strategy", "AI Agents"],
+    "areaServed": "Finance, Accounting & Consulting Firms",
+    "serviceType": ["AI Strategy & Planning", "AI Advisory", "AI Execution"],
+    "sameAs": [
+      "<%= links.substack %>",
+      "<%= links.finney %>"
+    ]
+  }
+  </script>
+  <% if (pageType === 'Service') { %>
+  <!-- Structured Data: Services -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": "Orphil AI Services",
+    "itemListElement": [
+      {
+        "@type": "Service",
+        "position": 1,
+        "name": "AI Strategy & Planning",
+        "description": "AI training, transformation roadmaps, resourcing and staff augmentation for finance and accounting firms.",
+        "provider": { "@type": "Organization", "name": "<%= siteTitle %>" }
+      },
+      {
+        "@type": "Service",
+        "position": 2,
+        "name": "AI Advisory",
+        "description": "Specialist AI counsel, governance and oversight, community and thought leadership.",
+        "provider": { "@type": "Organization", "name": "<%= siteTitle %>" }
+      },
+      {
+        "@type": "Service",
+        "position": 3,
+        "name": "AI Execution",
+        "description": "AI transformation delivery, agent development, and application development.",
+        "provider": { "@type": "Organization", "name": "<%= siteTitle %>" }
+      }
+    ]
+  }
+  </script>
+  <% } %>
+  <% if (pageType === 'Product') { %>
+  <!-- Structured Data: Product -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "myaiforone",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "macOS, Windows",
+    "description": "<%= pageDescription %>",
+    "url": "<%= links.myaiforone %>",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "Zero platform fees — bring your own AI subscription"
+    }
+  }
+  </script>
+  <% } %>
+  <% if (pageType === 'AboutPage') { %>
+  <!-- Structured Data: Person -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "name": "<%= founder %>",
+    "jobTitle": "Founder & AI Transformation Partner",
+    "worksFor": {
+      "@type": "Organization",
+      "name": "<%= legalName %>"
+    },
+    "knowsAbout": ["Artificial Intelligence", "Finance", "Accounting", "AI Agents", "AI Strategy"]
+  }
+  </script>
+  <% } %>
+  <% if (pageType === 'ContactPage') { %>
+  <!-- Structured Data: Contact -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ContactPage",
+    "name": "Contact Orphil",
+    "url": "https://orphiladvisory.com/contact",
+    "mainEntity": {
+      "@type": "Organization",
+      "name": "<%= siteTitle %>",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "sales",
+        "url": "<%= links.booking %>"
+      }
+    }
+  }
+  </script>
+  <% } %>
+</head>
+<body>

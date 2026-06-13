@@ -1,0 +1,92 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<main class="page-content">
+  <section class="hero" style="padding-bottom:60px;">
+    <div class="container">
+      <div class="hero-content fade-in">
+        <span class="overline">Contact</span>
+        <h1>Let's start a <span class="accent">conversation</span></h1>
+        <p class="lead">Whether you're exploring AI for the first time or ready to scale — we'd love to hear about where you are and where you want to go.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <div class="contact-grid">
+        <div class="contact-info">
+          <h3>Get in Touch</h3>
+          <p>Every engagement starts with a conversation. No pitch decks. No pressure. Just a real discussion about your firm, your challenges, and whether we're the right fit.</p>
+
+          <div class="contact-method">
+            <div class="method-icon">&#128197;</div>
+            <div>
+              <div class="method-label">Schedule a Call</div>
+              <div class="method-value"><a href="<%= links.booking %>">Book a time that works for you</a></div>
+            </div>
+          </div>
+
+          <div class="contact-method">
+            <div class="method-icon">&#9993;</div>
+            <div>
+              <div class="method-label">Email</div>
+              <div class="method-value"><a href="mailto:ore@agenticledger.ai">ore@agenticledger.ai</a></div>
+            </div>
+          </div>
+
+          <div class="contact-method">
+            <div class="method-icon">&#128240;</div>
+            <div>
+              <div class="method-label">Follow</div>
+              <div class="method-value"><a href="<%= links.substack %>" target="_blank" rel="noopener">orephillips.substack.com</a></div>
+            </div>
+          </div>
+
+          <div class="contact-method">
+            <div class="method-icon">&#128172;</div>
+            <div>
+              <div class="method-label">Community</div>
+              <div class="method-value"><a href="<%= links.slack %>" target="_blank" rel="noopener">AI in Finance Slack</a></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="padding:40px;">
+            <h3 style="margin-bottom:8px;">Start a Conversation</h3>
+            <p style="margin-bottom:24px;">Tell us a bit about your firm and what you're exploring. We'll get back to you within one business day.</p>
+
+            <% if (typeof formSuccess !== 'undefined' && formSuccess) { %>
+              <div class="form-success">
+                Thank you! We'll be in touch soon.
+              </div>
+            <% } else { %>
+              <form action="/contact" method="POST" class="contact-form">
+                <div class="form-group">
+                  <label for="name">Name</label>
+                  <input type="text" id="name" name="name" required placeholder="Your full name">
+                </div>
+                <div class="form-group">
+                  <label for="email">Email</label>
+                  <input type="email" id="email" name="email" required placeholder="you@company.com">
+                </div>
+                <div class="form-group">
+                  <label for="company">Firm / Company</label>
+                  <input type="text" id="company" name="company" placeholder="Your firm name">
+                </div>
+                <div class="form-group">
+                  <label for="message">What are you looking to explore?</label>
+                  <textarea id="message" name="message" rows="4" required placeholder="Tell us about your goals, challenges, or questions..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Send Message</button>
+              </form>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<%- include('partials/footer') %>
