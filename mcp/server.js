@@ -29,6 +29,8 @@ const { reconcileRun, getReconciliation } = require('../services/accrual/reconci
 const improve = require('../services/accrual/improveService');
 const { listProcesses, createProcess } = require('../services/accrual/processService');
 const cfg = require('../services/accrual/configService');
+const supervisor = require('../services/accrual/supervisorService');
+const { provisionOwnerAgent } = require('../services/accrual/processAgentService');
 const prisma = require('../services/db');
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -564,11 +566,65 @@ server.registerTool(
   async ({ slug, stepToolId }) => { try { return text(await cfg.detachStepTool(slug, stepToolId)); } catch (e) { return fail(e); } },
 );
 
+// ── 31–33. Process Owner Agent & proactive supervision ───────────────────────
+// Every process is owned by one supervisor agent (auto-provisioned on create).
+// The agent is NOT in the critical path — it observes, explains, and can trigger
+// or nudge. These tools let an external orchestrator read the owner agent and run
+// supervision ticks (auto-run when due, nudge a stuck gate) on a schedule.
+
+server.registerTool(
+  'process_get_owner_agent',
+  {
+    title: 'Get a process owner agent',
+    description: 'Get the Process Owner Agent (the supervisor) for a process: its id, name, and supervisor features. Every process is owned by exactly one such agent.',
+    inputSchema: { slug: z.string().describe('Process slug.') },
+  },
+  async ({ slug }) => {
+    try {
+      const process = await prisma.process.findFirst({
+        where: { slug },
+        include: { ownerAgent: { select: { id: true, name: true, slug: true, description: true, defaultModel: true, features: true } } },
+      });
+      if (!process) return fail(new Error('process not found'));
+      return text(process.ownerAgent || null);
+    } catch (e) { return fail(e); }
+  },
+);
+
+server.registerTool(
+  'process_provision_owner_agent',
+  {
+    title: 'Provision a process owner agent',
+    description: '(Re)provision the owner agent for a process, regenerating its supervisor system prompt from the current definition. Idempotent by agent slug.',
+    inputSchema: { slug: z.string().describe('Process slug.') },
+  },
+  async ({ slug }) => {
+    try {
+      const process = await prisma.process.findFirst({ where: { slug } });
+      if (!process) return fail(new Error('process not found'));
+      return text(await provisionOwnerAgent(process.id, { regeneratePrompt: true }));
+    } catch (e) { return fail(e); }
+  },
+);
+
+server.registerTool(
+  'process_supervise',
+  {
+    title: 'Run a supervision tick',
+    description: 'Run one proactive supervision tick for a process: auto-run the target period if due (mode=auto, engine-bound, no run yet) and nudge a run stuck awaiting a human (throttled). Deterministic and idempotent-by-period — safe to call on a cron. Omit slug to tick every active process.',
+    inputSchema: { slug: z.string().optional().describe('Process slug. Omit to tick all active processes.') },
+  },
+  async ({ slug }) => {
+    try { return text(slug ? await supervisor.tick(slug) : await supervisor.tickAll()); }
+    catch (e) { return fail(e); }
+  },
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // stderr only — stdout is the MCP channel.
-  console.error('Ridgeline Finance OS MCP server running on stdio. 26 tools registered.');
+  console.error('Ridgeline Finance OS MCP server running on stdio. 33 tools registered.');
 }
 
 main().catch((e) => { console.error('MCP fatal:', e); process.exit(1); });

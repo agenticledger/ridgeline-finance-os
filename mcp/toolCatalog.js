@@ -340,6 +340,30 @@ const TOOL_GROUPS = [
       },
     ],
   },
+  {
+    name: 'Supervision (Process Owner Agent)',
+    blurb: 'Every process is owned by exactly one Process Owner Agent — a supervisor that observes live run state, explains it, and can trigger or sign off steps on a human\u2019s instruction. It is NOT in the critical path; the deterministic engine still does the math. The supervise tick is deterministic and idempotent-by-period, so an external cron can drive proactive supervision: auto-run a period when due and nudge a run stuck awaiting a human.',
+    tools: [
+      {
+        name: 'process_get_owner_agent', group: 'supervision', title: 'Get a process owner agent', sideEffect: 'none',
+        mapsTo: 'GET /api/fos/process/:slug/agent',
+        description: 'Get the Process Owner Agent (supervisor) for a process: id, name, and supervisor features. Every process is owned by exactly one such agent.',
+        args: [{ name: 'slug', type: 'string', required: true, default: null, desc: 'Process slug.' }],
+      },
+      {
+        name: 'process_provision_owner_agent', group: 'supervision', title: 'Provision a process owner agent', sideEffect: 'writes',
+        mapsTo: 'POST /api/fos/process/:slug/agent/provision',
+        description: '(Re)provision the owner agent for a process, regenerating its supervisor system prompt from the current definition. Idempotent by agent slug.',
+        args: [{ name: 'slug', type: 'string', required: true, default: null, desc: 'Process slug.' }],
+      },
+      {
+        name: 'process_supervise', group: 'supervision', title: 'Run a supervision tick', sideEffect: 'writes',
+        mapsTo: 'POST /api/fos/supervisor/:slug/tick (or POST /api/fos/supervisor/tick when slug omitted)',
+        description: 'Run one proactive supervision tick: auto-run the target period if due (mode=auto, engine-bound, no run yet) and nudge a run stuck awaiting a human (throttled). Deterministic and idempotent-by-period — safe on a cron. Omit slug to tick every active process.',
+        args: [{ name: 'slug', type: 'string', required: false, default: null, desc: 'Process slug. Omit to tick all active processes.' }],
+      },
+    ],
+  },
 ];
 
 function toolCount() {
