@@ -49,32 +49,133 @@
     .lm-li { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
     .lm-sw { width: 10px; height: 10px; border-radius: 3px; }
 
-    .viewtoggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; }
+    .viewtoggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden;
+      position: fixed; top: 70px; left: 18px; z-index: 20; background: var(--panel); box-shadow: var(--shadow); }
     .viewtoggle a { padding: 6px 14px; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-2);
       text-decoration: none; display: flex; align-items: center; gap: 6px; }
     .viewtoggle a.on { background: var(--accent-soft); color: var(--accent-ink); }
     .viewtoggle a + a { border-left: 1px solid var(--line-strong); }
     .viewtoggle svg { width: 14px; height: 14px; }
+
+    /* Schematic node types */
+    .lm-node.step .lm-box { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.6; }
+    .lm-node.step.live .lm-box { stroke: var(--accent); }
+    .lm-node.step.attention .lm-box { stroke: var(--warn); }
+    .lm-node.step.posted .lm-box { stroke: var(--good); }
+    .lm-node.policy .lm-box { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.2; }
+    .lm-node.tool .lm-box { fill: var(--panel-2); stroke: var(--violet); stroke-width: 1.2; }
+    .lm-node.tool.engine .lm-box { stroke: var(--accent); stroke-dasharray: 3 2; }
+    /* decision-type accent stripe on step nodes */
+    .lm-dt { stroke-width: 4; }
+    .lm-dt.policy_based { stroke: var(--accent); }
+    .lm-dt.judgment_based { stroke: var(--violet); }
+    .lm-dt.mixed { stroke: var(--warn); }
+    .lm-gate { fill: var(--warn); stroke: var(--bg); stroke-width: 1.4; }
+    .lm-check { fill: none; stroke: var(--warn); stroke-width: 1.6; }
+    .lm-railhead { font-family: var(--mono); font-size: 10px; font-weight: 700; fill: var(--muted); letter-spacing: .08em; }
+
+    /* HUD bar (schematic) */
+    .lm-hud { position: fixed; top: 66px; left: 50%; transform: translateX(-50%); z-index: 25;
+      display: flex; align-items: center; gap: 0; padding: 0; border-radius: 12px;
+      background: var(--topbar-bg); backdrop-filter: blur(14px); border: 1px solid var(--line); box-shadow: var(--shadow); overflow: hidden; }
+    .lm-hud .seg { padding: 9px 14px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); }
+    .lm-hud .seg:last-child { border-right: 0; }
+    .lm-hud .k { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+    .lm-hud .v { font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--ink); }
+    .lm-hud .v.mono { font-family: var(--mono); }
+    .lm-hud .status-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+    .lm-hud .status-pill.attention { background: var(--warn-soft, rgba(230,160,30,.18)); color: var(--warn); }
+    .lm-hud .status-pill.live { background: var(--accent-soft); color: var(--accent-ink); }
+    .lm-hud .status-pill.posted { background: var(--good-soft, rgba(40,180,110,.16)); color: var(--good); }
+    .lm-hud .status-pill.idle { background: var(--panel-2); color: var(--muted); }
+
+    /* Fast-travel dropdowns */
+    .lm-travel { position: fixed; top: 70px; right: 18px; z-index: 25; display: flex; gap: 8px; }
+    .lm-travel select { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-2);
+      background: var(--panel); border: 1px solid var(--line-strong); border-radius: 9px; padding: 7px 10px; cursor: pointer; box-shadow: var(--shadow); }
+    .lm-travel select:hover { border-color: var(--accent); color: var(--accent); }
+    .lm-back { position: fixed; top: 70px; left: 18px; z-index: 25; font-family: var(--mono); font-size: 12px; font-weight: 600;
+      color: var(--ink-2); text-decoration: none; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 9px;
+      padding: 7px 12px; box-shadow: var(--shadow); display: inline-flex; align-items: center; gap: 6px; }
+    .lm-back:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Step detail drawer */
+    .lm-drawer { position: fixed; top: 56px; right: -460px; width: 440px; bottom: 0; z-index: 40;
+      background: var(--topbar-bg); backdrop-filter: blur(16px); border-left: 1px solid var(--line); box-shadow: var(--shadow);
+      transition: right .26s cubic-bezier(.2,.7,.2,1); overflow-y: auto; padding: 22px; }
+    .lm-drawer.open { right: 0; }
+    .lm-drawer h3 { font-family: var(--sans); font-size: 18px; font-weight: 800; color: var(--ink); margin: 0 0 4px; }
+    .lm-drawer .dt-tag { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 6px; background: var(--panel-2); color: var(--ink-2); margin: 0 6px 12px 0; }
+    .lm-drawer .sec { margin-top: 18px; }
+    .lm-drawer .sec h4 { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); margin: 0 0 8px; }
+    .lm-drawer .row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 7px; background: var(--panel); }
+    .lm-drawer .row .nm { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink); }
+    .lm-drawer .row .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .lm-drawer pre { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background: var(--panel); border: 1px solid var(--line);
+      border-radius: 8px; padding: 10px; overflow-x: auto; margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+    .lm-drawer .xclose { position: absolute; top: 16px; right: 18px; cursor: pointer; color: var(--muted); font-family: var(--mono); font-size: 18px; }
+    .lm-drawer .xclose:hover { color: var(--ink); }
+
+    #lm-svg { transition: transform .35s cubic-bezier(.2,.7,.2,1); }
+    #lm-svg.no-anim { transition: none; }
+    .lm-node.lm-dim { opacity: .12; transition: opacity .2s; }
+    .lm-edge.lm-dim { opacity: .06; transition: opacity .2s; }
+    .lm-order { font-family: var(--mono); font-weight: 700; fill: var(--bg); }
+    .lm-orderbg { fill: var(--ink-2); }
+    .lm-step-live .lm-orderbg { fill: var(--accent); }
+    .lm-step-attention .lm-orderbg { fill: var(--warn); }
+    .lm-step-posted .lm-orderbg { fill: var(--good); }
   </style>
 </head>
 <body class="livemap">
 
-<header class="topbar"><div class="row">
-  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Live Map</small></span></a>
-  <div class="viewtoggle">
-    <a href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Grid</a>
-    <a href="/processes/live" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></svg>Live Map</a>
-  </div>
-  <div class="grow"></div>
-  <span class="statuspill live"><span class="dot"></span><%= counts.live %> running · <%= counts.attention %> need you · <%= counts.posted %> posted</span>
-  <%- include('partials/docsmenu') %>
-  <button class="themebtn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
-    <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-    <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-  </button>
-</div></header>
+<%- include('partials/topbar', { active: 'processes', org: org }) %>
+
+<% var isSchematic = graph.mode === 'schematic'; %>
+
+<% if (!isSchematic) { %>
+<div class="viewtoggle" title="View">
+  <a href="/processes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Grid</a>
+  <a href="/processes/live" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3M9 18h6a3 3 0 0 0 3-3"/></svg>Live Map</a>
+</div>
+<% } else { %>
+<a class="lm-back" href="/processes/live"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>Overview</a>
+<div class="lm-hud">
+  <div class="seg"><span class="k"><%= hud.area || 'Process' %></span><span class="v"><%= hud.name %></span></div>
+  <% if (hud.agent) { %><div class="seg"><span class="k">Supervised by</span><span class="v mono"><%= hud.agent %></span></div><% } %>
+  <div class="seg"><span class="k">Cadence</span><span class="v mono"><%= hud.frequency %> · <%= hud.mode %></span></div>
+  <div class="seg"><span class="k">Steps</span><span class="v mono"><%= hud.steps %></span></div>
+  <div class="seg"><span class="k">Latest run<%= hud.period ? ' · ' + hud.period : '' %></span><span class="status-pill <%= hud.signal %>"><%= String(hud.status).toUpperCase() %></span></div>
+</div>
+<% } %>
+
+<div class="lm-travel">
+  <% if (!isSchematic) { %>
+  <select id="lm-bu" title="Filter by area">
+    <option value="">All areas</option>
+    <% nav.forEach(function(g){ %><option value="<%= g.slug %>"><%= g.name %></option><% }) %>
+  </select>
+  <% } %>
+  <select id="lm-proc" title="Jump to process">
+    <option value="">Jump to process…</option>
+    <% nav.forEach(function(g){ %>
+      <optgroup label="<%= g.name %>">
+        <% g.processes.forEach(function(pr){ %><option value="<%= pr.slug %>"<%= (current && current.slug === pr.slug) ? ' selected' : '' %>><%= pr.name %></option><% }) %>
+      </optgroup>
+    <% }) %>
+  </select>
+</div>
 
 <div id="lm-stage"><svg id="lm-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+
+<% if (isSchematic) { %>
+<div class="lm-drawer" id="lm-drawer">
+  <span class="xclose" onclick="lmCloseDrawer()">×</span>
+  <div id="lm-drawer-body"></div>
+</div>
+<% } %>
 
 <div class="lm-toolbar">
   <button class="lm-tbtn" onclick="lmZoom(1.2)">+</button>
@@ -82,15 +183,21 @@
   <button class="lm-tbtn" style="font-size:10px" onclick="lmFit()">FIT</button>
 </div>
 <div class="lm-legend">
+  <% if (isSchematic) { %>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--accent)"></span>Policy step</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--violet)"></span>Judgment / tool</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--warn)"></span>Gate / checkpoint</span>
+  <span class="lm-li"><span class="lm-sw" style="background:var(--good)"></span>Done</span>
+  <% } else { %>
   <span class="lm-li"><span class="lm-sw" style="background:var(--accent)"></span>Running</span>
   <span class="lm-li"><span class="lm-sw" style="background:var(--warn)"></span>Needs you</span>
   <span class="lm-li"><span class="lm-sw" style="background:var(--good)"></span>Posted</span>
   <span class="lm-li"><span class="lm-sw" style="background:var(--muted)"></span>Idle</span>
-  <span class="lm-li"><span class="lm-sw" style="background:var(--violet)"></span>Agent</span>
+  <% } %>
 </div>
 
 <script>window.LM_GRAPH = <%- JSON.stringify(graph) %>;</script>
-<script src="/js/processes-live.js?v=1"></script>
+<script src="/js/processes-live.js?v=2"></script>
 <script src="/js/theme.js"></script>
 </body>
 </html>

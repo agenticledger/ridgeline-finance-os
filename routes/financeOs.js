@@ -245,8 +245,8 @@ router.get('/processes/live', async (req, res, next) => {
       include: {
         org: true,
         function: true,
+        ownerAgent: true,
         runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, period: true } },
-        tools: { include: { tool: true } },
         _count: { select: { runs: true, steps: true } },
       },
     });
@@ -266,10 +266,13 @@ router.get('/processes/live', async (req, res, next) => {
     });
     const groups = [...byFn.values()].sort((a, b) => (order.has(a.slug) ? order.get(a.slug) : 99) - (order.has(b.slug) ? order.get(b.slug) : 99));
 
-    const agentSeen = new Map(); // dedupe agent nodes by tool slug
+    // Architecture read: Org → Area (sub-function) → Process. The owning agent is
+    // NOT a sibling here — it lives inside each process's schematic view.
+    const nav = [];
     groups.forEach((g) => {
       const fnId = `fn:${g.slug}`;
       let fnSignal = 'idle';
+      const navProcs = [];
       g.list.forEach((p) => {
         const status = p.runs[0] ? p.runs[0].status : null;
         let signal = 'idle';
@@ -282,23 +285,15 @@ router.get('/processes/live', async (req, res, next) => {
         nodes.push({
           id: pid, type: 'process', label: p.name, slug: p.slug, signal, col: 2,
           sublabel: `${p._count.steps} steps · ${p._count.runs} runs`,
-          frequency: p.frequency, mode: p.mode, fn: g.name,
+          frequency: p.frequency, mode: p.mode, fn: g.name, fnSlug: g.slug,
           period: p.runs[0] ? p.runs[0].period : null,
         });
         edges.push({ from: fnId, to: pid, signal });
-
-        // Owning agents (tools of type 'agent' mapped to the process).
-        p.tools.filter((pt) => pt.tool && pt.tool.type === 'agent').forEach((pt) => {
-          const aid = `ag:${pt.tool.slug}`;
-          if (!agentSeen.has(aid)) {
-            agentSeen.set(aid, true);
-            nodes.push({ id: aid, type: 'agent', label: pt.tool.name, signal: 'idle', col: 3, sublabel: pt.role || 'agent' });
-          }
-          edges.push({ from: pid, to: aid, signal });
-        });
+        navProcs.push({ slug: p.slug, name: p.name });
       });
-      nodes.push({ id: fnId, type: 'function', label: g.name, signal: fnSignal, col: 1, sublabel: `${g.list.length} process${g.list.length === 1 ? '' : 'es'}` });
+      nodes.push({ id: fnId, type: 'function', label: g.name, slug: g.slug, signal: fnSignal, col: 1, sublabel: `${g.list.length} process${g.list.length === 1 ? '' : 'es'}` });
       edges.push({ from: ORG_ID, to: fnId, signal: fnSignal });
+      nav.push({ slug: g.slug, name: g.name, processes: navProcs });
     });
 
     const counts = {
@@ -306,20 +301,148 @@ router.get('/processes/live', async (req, res, next) => {
       attention: nodes.filter((n) => n.type === 'process' && n.signal === 'attention').length,
       live: nodes.filter((n) => n.type === 'process' && n.signal === 'live').length,
       posted: nodes.filter((n) => n.type === 'process' && n.signal === 'posted').length,
-      agents: [...agentSeen.keys()].length,
     };
 
     res.render('processes-live', {
-      graph: { nodes, edges },
-      counts,
-      org: orgName,
+      graph: { nodes, edges, mode: 'overview' },
+      counts, nav, org: orgName, hud: null, current: null,
       pageTitle: 'Ridgeline Finance OS — Live Map',
       pageDescription: 'A living view of every finance process and the agents running them.',
     });
   } catch (e) { next(e); }
 });
 
-// Tools Registry — platform-wide inventory of skills, agents, humans, integrations.
+// Process schematic — the inside of one process: owner agent + ordered steps,
+// each step's policies (left) and tools (right), typed by decision type, with the
+// latest run's per-step status lighting the spine. Read-only architecture view.
+router.get('/processes/live/:slug', async (req, res, next) => {
+  try {
+    const ATTENTION = new Set(['awaiting_human', 'needs_review', 'blocked']);
+    const POSTED = new Set(['approved', 'posted', 'reconciled']);
+    const p = await prisma.process.findFirst({
+      where: { slug: req.params.slug, isActive: true },
+      include: {
+        org: true, businessUnit: true, function: true, ownerAgent: true,
+        steps: {
+          orderBy: { order: 'asc' },
+          include: { tool: true, stepTools: { include: { tool: true } }, policies: true },
+        },
+        policies: true,
+        tools: { include: { tool: true } },
+        runs: { orderBy: { createdAt: 'desc' }, take: 1, include: { steps: true } },
+      },
+    });
+    if (!p) return res.redirect('/processes/live');
+
+    const orgName = p.org ? p.org.name : 'Ridgeline Foods';
+    const lastRun = p.runs[0] || null;
+    const runStatus = lastRun ? lastRun.status : null;
+    let procSignal = 'idle';
+    if (runStatus && ATTENTION.has(runStatus)) procSignal = 'attention';
+    else if (runStatus === 'processing') procSignal = 'live';
+    else if (runStatus && POSTED.has(runStatus)) procSignal = 'posted';
+
+    // Map latest run's StepExecutions onto step status by stepId, falling back to key/order.
+    const execByStep = new Map();
+    const execByKey = new Map();
+    (lastRun ? lastRun.steps : []).forEach((se) => {
+      if (se.stepId) execByStep.set(se.stepId, se);
+      if (se.key) execByKey.set(se.key, se);
+    });
+    const STEP_SIG = { done: 'posted', running: 'live', awaiting_human: 'attention', error: 'attention', skipped: 'idle', pending: 'idle' };
+
+    const nodes = [];
+    const edges = [];
+    const AGENT_ID = 'agent';
+    nodes.push({
+      id: AGENT_ID, type: 'agent',
+      label: p.ownerAgent ? p.ownerAgent.name : 'Owner Agent',
+      slug: p.ownerAgent ? p.ownerAgent.slug : null,
+      sublabel: 'supervisor · not in critical path', signal: procSignal,
+    });
+
+    let prevSpineId = AGENT_ID;
+    p.steps.forEach((s) => {
+      const exec = execByStep.get(s.id) || execByKey.get(s.key) || null;
+      const signal = exec ? (STEP_SIG[exec.status] || 'idle') : 'idle';
+      const sid = `st:${s.id}`;
+
+      // Step-scoped policies (left branch).
+      const pols = (s.policies || []).map((po) => ({
+        id: `po:${po.id}`, type: 'policy', label: po.name, key: po.key,
+        definition: po.definition || '', params: po.params || {}, version: po.version,
+      }));
+      // Step tools + engine (right branch): step.tool, stepTools, then engineSource.
+      const toolList = [];
+      const seenTool = new Set();
+      if (s.tool) { seenTool.add(s.tool.id); toolList.push({ id: `to:${sid}:${s.tool.id}`, type: 'tool', label: s.tool.name, ttype: s.tool.type, slug: s.tool.slug }); }
+      (s.stepTools || []).forEach((st) => {
+        if (!st.tool || seenTool.has(st.tool.id)) return;
+        seenTool.add(st.tool.id);
+        toolList.push({ id: `to:${sid}:${st.tool.id}`, type: 'tool', label: st.tool.name, ttype: st.tool.type, slug: st.tool.slug, role: st.role || null });
+      });
+      if (s.engineSource) toolList.push({ id: `eng:${sid}`, type: 'tool', label: s.engineSource, ttype: 'engine', engine: true });
+
+      nodes.push({
+        id: sid, type: 'step', label: s.name, key: s.key, order: s.order,
+        decisionType: s.decisionType, isGate: s.isGate, pauseAfter: s.pauseAfter,
+        engineSource: s.engineSource || null, signal,
+        policies: pols, tools: toolList,
+        exec: exec ? { status: exec.status, outcome: exec.outcome || {}, policiesApplied: exec.policiesApplied || [] } : null,
+      });
+      pols.forEach((po) => { nodes.push(po); edges.push({ from: sid, to: po.id, signal, branch: 'policy' }); });
+      toolList.forEach((t) => { nodes.push(t); edges.push({ from: sid, to: t.id, signal, branch: 'tool' }); });
+      edges.push({ from: prevSpineId, to: sid, signal, spine: true });
+      prevSpineId = sid;
+    });
+
+    // Process-level policies (scope !== step, i.e. no stepId) + process tools → side rail.
+    const rail = {
+      policies: (p.policies || []).filter((po) => !po.stepId).map((po) => ({
+        id: `rpo:${po.id}`, type: 'policy', label: po.name, key: po.key, scope: po.scope,
+        definition: po.definition || '', params: po.params || {},
+      })),
+      tools: (p.tools || []).map((pt) => ({
+        id: `rto:${pt.id}`, type: 'tool', label: pt.tool ? pt.tool.name : 'tool',
+        ttype: pt.tool ? pt.tool.type : null, role: pt.role || null,
+      })),
+    };
+
+    // Fast-travel nav: all areas + their processes (same shape as overview).
+    const allRows = await prisma.process.findMany({
+      where: { isActive: true }, orderBy: { createdAt: 'asc' },
+      include: { function: true },
+    });
+    const order = new Map(SUBFUNCTIONS.map((s, i) => [s.slug, i]));
+    const byFn = new Map();
+    allRows.forEach((pr) => {
+      const slug = pr.function ? pr.function.slug : 'unassigned';
+      if (!byFn.has(slug)) byFn.set(slug, { slug, name: pr.function ? pr.function.name : 'Unassigned', processes: [] });
+      byFn.get(slug).processes.push({ slug: pr.slug, name: pr.name });
+    });
+    const nav = [...byFn.values()].sort((a, b) => (order.has(a.slug) ? order.get(a.slug) : 99) - (order.has(b.slug) ? order.get(b.slug) : 99));
+
+    res.render('processes-live', {
+      graph: { nodes, edges, mode: 'schematic', rail },
+      counts: null, nav, org: orgName,
+      current: { slug: p.slug, name: p.name, fnSlug: p.function ? p.function.slug : null },
+      hud: {
+        name: p.name,
+        area: p.function ? p.function.name : (p.businessUnit ? p.businessUnit.name : ''),
+        agent: p.ownerAgent ? p.ownerAgent.name : null,
+        agentSlug: p.ownerAgent ? p.ownerAgent.slug : null,
+        frequency: p.frequency, mode: p.mode,
+        status: runStatus || 'idle', signal: procSignal,
+        period: lastRun ? lastRun.period : null,
+        steps: p.steps.length,
+      },
+      pageTitle: `Ridgeline Finance OS — ${p.name}`,
+      pageDescription: `Live schematic of the ${p.name} process — agent, steps, policies and tools.`,
+    });
+  } catch (e) { next(e); }
+});
+
+// Tools Registry — platform-wide inventory of skills, agents, prompts, and MCP servers.
 router.get('/registry', async (req, res, next) => {
   try {
     const rows = await prisma.tool.findMany({
