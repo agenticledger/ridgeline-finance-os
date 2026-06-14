@@ -167,7 +167,148 @@ async function buildView(req, res, slug, active) {
   });
 }
 
-router.get('/', (req, res, next) => buildView(req, res, PROCESS_SLUG, 'monitor').catch(next));
+// Home — the operator's landing surface: what needs you, what's running on its
+// own, your agents, recent activity, and a Tools Registry snapshot.
+const ATTENTION_STATUSES = ['awaiting_human', 'needs_review', 'blocked'];
+const POSTED_STATUSES = ['approved', 'posted', 'reconciled'];
+
+function initials(name) {
+  return String(name || '')
+    .split(/\s+/).filter(Boolean).slice(0, 2)
+    .map((w) => w[0]).join('').toUpperCase() || '·';
+}
+
+async function buildHome(req, res) {
+  const processes = await listProcesses();
+  const counts = {
+    processes: processes.length,
+    running: processes.filter((p) => p.signal === 'live').length,
+    attention: processes.filter((p) => p.signal === 'attention').length,
+    notRunnable: processes.filter((p) => !p.runnable).length,
+  };
+
+  // Agents — owner agents and the live state of the processes they supervise.
+  const agentRows = await prisma.agent.findMany({
+    where: { isActive: true },
+    orderBy: { name: 'asc' },
+    include: {
+      ownedProcesses: {
+        select: {
+          name: true, slug: true,
+          runs: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true, period: true } },
+        },
+      },
+    },
+  });
+  const attn = new Set(ATTENTION_STATUSES);
+  const posted = new Set(POSTED_STATUSES);
+  const agents = agentRows.map((a) => {
+    let live = false, waiting = false, period = null;
+    (a.ownedProcesses || []).forEach((p) => {
+      const r = p.runs[0];
+      if (!r) return;
+      if (r.status === 'processing') live = true;
+      if (attn.has(r.status)) waiting = true;
+      if (!period && r.period) period = r.period;
+    });
+    const supervises = (a.ownedProcesses || []).map((p) => p.name);
+    let detail;
+    if (waiting) detail = `Paused for your sign-off${period ? ` · ${period}` : ''}`;
+    else if (live) detail = `Running${period ? ` · ${period}` : ''}`;
+    else detail = supervises.length ? 'Standing by' : 'No process assigned';
+    return {
+      name: a.name, slug: a.slug, initials: initials(a.name),
+      status: live || waiting ? 'live' : 'idle',
+      detail, supervises: supervises.join(', '),
+    };
+  });
+
+  // Needs you — open action items on every run that is waiting on a human.
+  const openRuns = await prisma.accrualRun.findMany({
+    where: { status: { in: ATTENTION_STATUSES } },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      process: { select: { name: true, slug: true } },
+      actionItems: { where: { status: 'open' }, orderBy: { ord: 'asc' } },
+    },
+  });
+  const inbox = [];
+  openRuns.forEach((r) => {
+    (r.actionItems || []).forEach((ai) => {
+      inbox.push({
+        title: ai.title,
+        detail: ai.detail || '',
+        amount: ai.amount,
+        severity: ai.severity,
+        procName: r.process ? r.process.name : 'Process',
+        procSlug: r.process ? r.process.slug : null,
+        runId: r.id,
+        initial: initials(r.process ? r.process.name : 'P').slice(0, 1),
+      });
+    });
+  });
+
+  // Recent activity — the latest runs across every process.
+  const recentRuns = await prisma.accrualRun.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 6,
+    include: { process: { select: { name: true, slug: true } } },
+  });
+  const activity = recentRuns.map((r) => {
+    let kind = 'run', label;
+    const proc = r.process ? r.process.name : 'Process';
+    if (r.status === 'processing') { kind = 'run'; label = `${proc} · ${r.period} run started`; }
+    else if (attn.has(r.status)) { kind = 'edit'; label = `${proc} · ${r.period} awaiting sign-off`; }
+    else if (posted.has(r.status)) { kind = 'post'; label = `${proc} · ${r.period} posted`; }
+    else { kind = 'run'; label = `${proc} · ${r.period} ${r.status}`; }
+    const amt = r.totalAccrual ? `$${Math.round(r.totalAccrual).toLocaleString('en-US')}` : null;
+    return {
+      kind, label,
+      meta: [amt, r.mode, new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })].filter(Boolean).join(' · '),
+      href: r.process ? `/process/${r.process.slug}/monitor?run=${r.id}` : '#',
+    };
+  });
+
+  // Tools Registry snapshot — a few tools + the true total (tools + agents).
+  const toolRows = await prisma.tool.findMany({
+    where: { type: { not: 'agent' } },
+    orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    take: 4,
+  });
+  const toolTotal = await prisma.tool.count({ where: { type: { not: 'agent' } } });
+  const registryTotal = toolTotal + agents.length;
+  const tools = toolRows.map((t) => ({
+    name: t.name, slug: t.slug,
+    type: (TOOL_TYPE_META[t.type] || {}).label || t.type,
+    ref: t.slug,
+  }));
+
+  // The primary agent for the chat dock — prefer one supervising a waiting/live
+  // process, else the freight owner, else the first active agent.
+  let primaryAgentId = null, primaryAgentName = null;
+  const waitingAgent = agentRows.find((a) => (a.ownedProcesses || []).some((p) => p.runs[0] && (attn.has(p.runs[0].status) || p.runs[0].status === 'processing')));
+  const chosen = waitingAgent
+    || agentRows.find((a) => (a.ownedProcesses || []).some((p) => p.slug === PROCESS_SLUG))
+    || agentRows[0];
+  if (chosen) { primaryAgentId = chosen.id; primaryAgentName = chosen.name; }
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const gsub = inbox.length
+    ? `${inbox.length} thing${inbox.length === 1 ? '' : 's'} need${inbox.length === 1 ? 's' : ''} you. Everything else is running on its own.`
+    : 'Nothing needs you right now. Everything is running on its own.';
+
+  res.render('home', {
+    org: processes[0] ? processes[0].org : 'Ridgeline Foods',
+    counts, agents, inbox, activity, tools, registryTotal,
+    primaryAgentId, primaryAgentName,
+    greeting, gsub,
+    pageTitle: 'Ridgeline Finance OS — Home',
+    pageDescription: 'Your finance command center — what needs you, what is running on its own, your agents, and the tools registry.',
+  });
+}
+
+router.get('/', (req, res, next) => buildHome(req, res).catch(next));
 
 // Manual /process/new form was removed (decision §14.8). New processes are born
 // agentically via the automator (the owner agent builds the package).

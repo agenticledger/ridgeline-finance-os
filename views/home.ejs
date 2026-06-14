@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+  <meta name="description" content="<%= pageDescription %>">
+  <meta name="robots" content="noindex">
+  <script>(function(){try{var t=localStorage.getItem('rl-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/fos.css?v=29">
+  <style>
+    /* Cyan-tinted hairline that reads as "designed", not a default gray box. */
+    .home{--cl:color-mix(in srgb,var(--accent) 15%,var(--line));--cl-hi:color-mix(in srgb,var(--accent) 42%,var(--line));
+      max-width:var(--appw);margin:0 auto;padding:34px 24px 90px}
+
+    /* Greeting */
+    .home-greet{margin-bottom:26px}
+    .home-greet .eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:9px}
+    .home-greet h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+    .home-greet .gsub{font-size:14.5px;color:var(--ink-2);margin-top:7px}
+
+    /* Stat bar — one panel, hairline-divided cells (not 4 floating boxes) */
+    .statbar{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border:1px solid var(--cl);border-radius:18px;overflow:hidden;margin-bottom:30px}
+    .stat{padding:20px 22px;position:relative}
+    .stat + .stat::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:1px;background:var(--line-2)}
+    .stat .sl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+    .stat .sv{font-size:34px;font-weight:800;letter-spacing:-.03em;color:var(--ink);margin-top:10px;line-height:1;font-variant-numeric:tabular-nums}
+    .stat .sd{font-size:12.5px;color:var(--muted);margin-top:9px}
+    @media(max-width:920px){.statbar{grid-template-columns:repeat(2,1fr)}.stat:nth-child(3)::before{display:none}}
+
+    .home-cols{display:grid;grid-template-columns:1fr 372px;gap:30px;align-items:start}
+    @media(max-width:1020px){.home-cols{grid-template-columns:1fr}}
+
+    /* Section headers */
+    .sec-h{display:flex;align-items:center;gap:10px;margin:0 0 15px}
+    .sec-h h2{margin:0;font-size:17px;font-weight:760;letter-spacing:-.01em;color:var(--ink)}
+    .sec-h .cnt{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border:1px solid var(--cl);border-radius:999px;padding:2px 9px}
+    .sec-h .more{margin-left:auto;font-size:13px;font-weight:600;color:var(--accent-ink);text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+    .sec-h .more svg{width:14px;height:14px;transition:transform .18s}
+    .sec-h .more:hover svg{transform:translateX(3px)}
+
+    /* Shared flat-card look: tinted hairline, no shadow at rest, soft cyan glow on hover */
+    .lift{transition:border-color .18s,box-shadow .18s,transform .18s}
+    .lift:hover{border-color:var(--cl-hi);box-shadow:0 10px 30px color-mix(in srgb,var(--accent) 12%,transparent);transform:translateY(-1px)}
+
+    /* Needs-you inbox */
+    .inbox{display:flex;flex-direction:column;gap:12px;margin-bottom:36px}
+    .needcard{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--cl);border-radius:16px;padding:17px 19px;text-decoration:none}
+    .needcard .nc-ic{width:38px;height:38px;flex:none;border-radius:11px;background:transparent;color:var(--muted);border:1px solid var(--cl);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13.5px}
+    .needcard .nc-body{flex:1;min-width:0}
+    .needcard .nc-t{font-size:14.5px;font-weight:700;color:var(--ink)}
+    .needcard .nc-t .proc{color:var(--muted);font-weight:600}
+    .needcard .nc-d{font-size:13px;color:var(--ink-2);margin-top:4px}
+    .needcard .nc-amt{font-family:var(--mono);font-weight:600;color:var(--ink)}
+    .needcard .nc-go{flex:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:650;color:var(--accent-ink)}
+    .needcard .nc-go svg{width:15px;height:15px;transition:transform .18s}
+    .needcard:hover .nc-go svg{transform:translateX(3px)}
+
+    .allclear{display:flex;align-items:center;gap:13px;background:var(--panel);border:1px solid var(--cl);border-radius:16px;padding:24px;color:var(--ink-2);font-size:14px;margin-bottom:36px}
+    .allclear svg{width:22px;height:22px;color:var(--accent-ink);flex:none}
+
+    /* Agents */
+    .agents-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:560px){.agents-grid{grid-template-columns:1fr}}
+    .agentcard{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--cl);border-radius:16px;padding:18px;text-decoration:none}
+    .agentcard .av{width:42px;height:42px;flex:none;border-radius:12px;background:transparent;color:var(--muted);border:1px solid var(--cl);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13.5px;letter-spacing:.02em}
+    .agentcard .ab{flex:1;min-width:0}
+    .agentcard .an{font-size:14.5px;font-weight:720;color:var(--ink);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+    .agentcard .an .st{font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+    .agentcard .an .st::before{content:"";width:7px;height:7px;border-radius:50%;flex:none}
+    .agentcard .an .st.live{color:var(--accent-ink)}
+    .agentcard .an .st.live::before{background:var(--accent)}
+    .agentcard .an .st.idle{color:var(--muted)}
+    .agentcard .an .st.idle::before{background:var(--muted)}
+    .agentcard .ad-txt{font-size:12.5px;color:var(--ink-2);margin-top:5px}
+    .agentcard .aproc{font-size:11.5px;color:var(--muted);margin-top:9px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+
+    /* Right rail */
+    .rail{display:flex;flex-direction:column;gap:22px}
+    .railcard{background:var(--panel);border:1px solid var(--cl);border-radius:18px;overflow:hidden}
+    .railcard .rc-h{padding:16px 18px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:flex;align-items:center;gap:9px}
+    .railcard .rc-h .rc-cnt{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border:1px solid var(--cl);border-radius:999px;padding:2px 8px;letter-spacing:0;text-transform:none}
+    .feed{display:flex;flex-direction:column;padding:0 6px 6px}
+    .feeditem{display:flex;gap:12px;padding:11px 12px;border-radius:11px;text-decoration:none}
+    .feeditem:hover{background:var(--panel-2)}
+    .feeditem .fi-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none}
+    .fi-dot.post{background:var(--accent)}.fi-dot.edit{background:var(--muted)}.fi-dot.run{background:var(--accent)}
+    .feeditem .fi-t{font-size:13px;color:var(--ink);font-weight:600;line-height:1.35}
+    .feeditem .fi-m{font-size:11.5px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+    .empty-rail{padding:0 18px 18px;font-size:12.5px;color:var(--muted)}
+    .tools{display:flex;flex-direction:column;padding:0 6px}
+    .toolrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;text-decoration:none}
+    .toolrow:hover{background:var(--panel-2)}
+    .toolrow .ti{width:32px;height:32px;flex:none;border-radius:9px;background:transparent;border:1px solid var(--cl);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+    .toolrow .ti svg{width:15px;height:15px}
+    .toolrow .tb{flex:1;min-width:0}
+    .toolrow .tn{font-size:13px;font-weight:650;color:var(--ink)}
+    .toolrow .tk{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .toolrow .tt{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:transparent;border:1px solid var(--cl);border-radius:999px;padding:2px 8px;flex:none}
+    .tools-foot{padding:12px 18px 16px}
+    .tools-foot a{font-size:13px;font-weight:600;color:var(--accent-ink);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+    .tools-foot a svg{width:14px;height:14px;transition:transform .18s}
+    .tools-foot a:hover svg{transform:translateX(3px)}
+    .agent-fab{background:var(--ink);color:var(--panel);box-shadow:0 8px 24px color-mix(in srgb,var(--ink) 22%,transparent)}
+    .agent-fab:hover{box-shadow:0 12px 30px color-mix(in srgb,var(--ink) 30%,transparent)}
+    .agent-fab svg{color:var(--panel)}
+  </style>
+</head>
+<body>
+<% const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'; %>
+
+<%- include('partials/topbar', { active: 'home', org: org }) %>
+
+<main class="home">
+  <div class="home-greet">
+    <div class="eyebrow"><%= (org && org.name) ? org.name : org %> · Finance OS</div>
+    <h1><%= greeting %>.</h1>
+    <div class="gsub"><%= gsub %></div>
+  </div>
+
+  <!-- stat bar -->
+  <div class="statbar">
+    <div class="stat"><div class="sl">Processes</div><div class="sv"><%= counts.processes %></div><div class="sd"><%= counts.notRunnable %> not yet runnable</div></div>
+    <div class="stat"><div class="sl">Running now</div><div class="sv"><%= counts.running %></div><div class="sd"><%= counts.running ? 'live run in progress' : 'nothing running' %></div></div>
+    <div class="stat"><div class="sl">Need attention</div><div class="sv"><%= counts.attention %></div><div class="sd"><%= counts.attention ? 'awaiting your sign-off' : 'all clear' %></div></div>
+    <div class="stat"><div class="sl">Agents</div><div class="sv"><%= agents.length %></div><div class="sd"><%= agents.filter(a=>a.status==='live').length %> active · <%= agents.filter(a=>a.status==='idle').length %> standing by</div></div>
+  </div>
+
+  <div class="home-cols">
+    <!-- left column -->
+    <section>
+      <!-- needs-you inbox -->
+      <div class="sec-h"><h2>Needs you</h2><span class="cnt"><%= inbox.length %></span></div>
+      <% if (inbox.length) { %>
+        <div class="inbox">
+          <% inbox.forEach(function(it){ %>
+            <a class="needcard lift" href="<%= it.procSlug ? `/process/${it.procSlug}/monitor?run=${it.runId}` : '#' %>">
+              <span class="nc-ic"><%= it.initial %></span>
+              <span class="nc-body">
+                <div class="nc-t"><%= it.title %> <span class="proc">· <%= it.procName %></span></div>
+                <% if (it.detail || it.amount != null) { %>
+                  <div class="nc-d"><% if (it.amount != null) { %><span class="nc-amt">$<%= Math.round(it.amount).toLocaleString('en-US') %></span> · <% } %><%= it.detail %></div>
+                <% } %>
+              </span>
+              <span class="nc-go">Review <%- arrow %></span>
+            </a>
+          <% }) %>
+        </div>
+      <% } else { %>
+        <div class="allclear">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>You're all caught up. Every process is running on its own.</span>
+        </div>
+      <% } %>
+
+      <!-- agents on the page -->
+      <div class="sec-h"><h2>Your agents</h2><span class="cnt"><%= agents.length %></span><a class="more" href="/agents">See all agents <%- arrow %></a></div>
+      <div class="agents-grid">
+        <% agents.forEach(function(a){ %>
+          <a class="agentcard lift" href="/agents?agent=<%= encodeURIComponent(a.slug) %>">
+            <span class="av"><%= a.initials %></span>
+            <span class="ab">
+              <div class="an"><%= a.name %> <span class="st <%= a.status %>"><%= a.status %></span></div>
+              <div class="ad-txt"><%= a.detail %></div>
+              <% if (a.supervises) { %><div class="aproc">Supervises · <%= a.supervises %></div><% } %>
+            </span>
+          </a>
+        <% }) %>
+      </div>
+    </section>
+
+    <!-- right rail -->
+    <aside class="rail">
+      <!-- recent activity -->
+      <div class="railcard">
+        <div class="rc-h">Recent activity</div>
+        <% if (activity.length) { %>
+          <div class="feed">
+            <% activity.forEach(function(f){ %>
+              <a class="feeditem" href="<%= f.href %>"><span class="fi-dot <%= f.kind %>"></span><span><div class="fi-t"><%= f.label %></div><div class="fi-m"><%= f.meta %></div></span></a>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div class="empty-rail">No runs yet.</div>
+        <% } %>
+      </div>
+
+      <!-- tools registry snapshot -->
+      <div class="railcard">
+        <div class="rc-h">Tools Registry <span class="rc-cnt"><%= registryTotal %></span></div>
+        <% if (tools.length) { %>
+          <div class="tools">
+            <% tools.forEach(function(t){ %>
+              <a class="toolrow" href="/registry/<%= t.slug %>">
+                <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+                <span class="tb"><div class="tn"><%= t.name %></div><div class="tk"><%= t.ref %></div></span>
+                <span class="tt"><%= t.type %></span>
+              </a>
+            <% }) %>
+          </div>
+        <% } %>
+        <div class="tools-foot"><a href="/registry">Click for more — full registry <%- arrow %></a></div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<% if (primaryAgentId) { %>
+<!-- ── Chat dock — ask your agents ───────────────────────────────────── -->
+<button class="agent-fab" type="button" onclick="openAgentDock()" aria-label="Ask your agents">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="16" y1="16" x2="16.01" y2="16"/></svg>
+  <span>Ask your agents</span>
+</button>
+
+<div class="agent-dock" id="agentDock" aria-hidden="true">
+  <div class="ad-head">
+    <div class="ad-id">
+      <span class="ad-av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="16" y1="16" x2="16.01" y2="16"/></svg></span>
+      <div><b><%= primaryAgentName %></b><small>Supervisor &middot; reads live run state</small></div>
+    </div>
+    <button class="ad-x" type="button" onclick="closeAgentDock()" aria-label="Close">&times;</button>
+  </div>
+  <div class="ad-body" id="adBody">
+    <div class="ad-intro">
+      <p>I supervise your finance processes. Ask me what needs your attention, why a run paused, or tell me to trigger or sign off a run.</p>
+      <div class="ad-sugg">
+        <button type="button" onclick="adSuggest(this)">What needs my attention right now?</button>
+        <button type="button" onclick="adSuggest(this)">What is the status of the latest run?</button>
+        <button type="button" onclick="adSuggest(this)">Explain the biggest exception.</button>
+      </div>
+    </div>
+  </div>
+  <form class="ad-input" id="adForm" onsubmit="return adSend(event)">
+    <input type="text" id="adText" placeholder="Ask your agents..." autocomplete="off">
+    <button type="submit" id="adSendBtn" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+  </form>
+</div>
+
+<script>
+(function(){
+  var AGENT_ID = <%- JSON.stringify(primaryAgentId) %>;
+  var convId = null, busy = false;
+  var dock = document.getElementById('agentDock');
+  var body = document.getElementById('adBody');
+
+  window.openAgentDock = function(){ dock.classList.add('open'); dock.setAttribute('aria-hidden','false'); document.body.classList.add('dock-open'); setTimeout(function(){ var t=document.getElementById('adText'); if(t) t.focus(); }, 60); };
+  window.closeAgentDock = function(){ dock.classList.remove('open'); dock.setAttribute('aria-hidden','true'); document.body.classList.remove('dock-open'); };
+  window.adSuggest = function(b){ document.getElementById('adText').value = b.textContent; document.getElementById('adText').focus(); };
+
+  function bubble(role){
+    var d = document.createElement('div');
+    d.className = 'ad-msg ' + role;
+    body.appendChild(d);
+    body.scrollTop = body.scrollHeight;
+    return d;
+  }
+  function toolChip(name){
+    var c = document.createElement('div');
+    c.className = 'ad-tool';
+    c.textContent = 'called ' + name;
+    body.appendChild(c);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  async function ensureConv(){
+    if (convId) return convId;
+    var r = await fetch('/api/chat/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ agentId: AGENT_ID }) });
+    var j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'could not start conversation');
+    convId = j.data.conversationId;
+    return convId;
+  }
+
+  window.adSend = function(ev){
+    ev.preventDefault();
+    if (busy) return false;
+    var input = document.getElementById('adText');
+    var text = (input.value || '').trim();
+    if (!text) return false;
+    var intro = body.querySelector('.ad-intro'); if (intro) intro.remove();
+    input.value = '';
+    busy = true;
+    document.getElementById('adSendBtn').disabled = true;
+    bubble('user').textContent = text;
+    var out = bubble('bot');
+    out.innerHTML = '<span class="ad-typing"><i></i><i></i><i></i></span>';
+    var acc = '';
+
+    ensureConv().then(function(cid){
+      return fetch('/api/chat/' + cid + '/stream', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: text }) });
+    }).then(function(resp){
+      var reader = resp.body.getReader();
+      var dec = new TextDecoder();
+      var buf = '';
+      function pump(){
+        return reader.read().then(function(res){
+          if (res.done) { finish(); return; }
+          buf += dec.decode(res.value, { stream:true });
+          var parts = buf.split('\n\n');
+          buf = parts.pop();
+          parts.forEach(function(block){
+            var ev = 'message', data = '';
+            block.split('\n').forEach(function(line){
+              if (line.indexOf('event:') === 0) ev = line.slice(6).trim();
+              else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
+            });
+            if (!data) return;
+            var d; try { d = JSON.parse(data); } catch(e){ return; }
+            if (ev === 'delta' && d.content){ acc += d.content; render(); }
+            else if (ev === 'tool' && d.data){ var nm = (d.data.name || d.data.tool || (typeof d.data==='string'?d.data:'tool')); toolChip(nm); }
+            else if (ev === 'error'){ acc += '\n\n_' + (d.message||'error') + '_'; render(); }
+          });
+          return pump();
+        });
+      }
+      function render(){ out.innerHTML = mdLite(acc); body.scrollTop = body.scrollHeight; }
+      function finish(){ if(!acc) out.innerHTML = '<span style="color:var(--ink-3)">No response.</span>'; busy=false; document.getElementById('adSendBtn').disabled=false; input.focus(); }
+      return pump();
+    }).catch(function(e){
+      out.innerHTML = '<span style="color:var(--bad)">' + (e.message||'Request failed') + '</span>';
+      busy=false; document.getElementById('adSendBtn').disabled=false;
+    });
+    return false;
+  };
+
+  function mdLite(t){
+    var esc = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    esc = esc.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\*(.+?)\*/g,'<i>$1</i>').replace(/`(.+?)`/g,'<code>$1</code>');
+    return esc.replace(/\n/g,'<br>');
+  }
+})();
+</script>
+<% } %>
+
+<script src="/js/theme.js"></script>
+</body>
+</html>

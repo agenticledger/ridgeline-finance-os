@@ -5,14 +5,15 @@
   var _active = (typeof active !== 'undefined' && active) ? active : '';
 %>
 <header class="topbar"><div class="row">
-  <a class="brand" href="/processes"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Finance OS</small></span></a>
+  <a class="brand" href="/"><span class="glyph">R</span><span>Ridgeline Finance OS<small>Finance OS</small></span></a>
   <div class="orgsel" title="Organization (tenant)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M19 21V11a2 2 0 0 0-2-2h-2"/><path d="M9 7h2M9 11h2M9 15h2"/></svg>
     <select aria-label="Organization" disabled><option><%= _org %></option></select>
   </div>
+  <a class="navlink <%= _active === 'home' ? 'on' : '' %>" href="/">Home</a>
   <a class="navlink <%= _active === 'processes' ? 'on' : '' %>" href="/processes">Processes</a>
+  <a class="navlink <%= _active === 'agents' ? 'on' : '' %>" href="/agents">Agents</a>
   <a class="navlink <%= _active === 'registry' ? 'on' : '' %>" href="/registry">Tools Registry</a>
-  <a class="navlink <%= _active === 'agents' ? 'on' : '' %>" href="/agents">Agent chat</a>
   <div class="grow"></div>
   <a class="navlink <%= _active === 'admin' ? 'on' : '' %>" href="/admin">Admin</a>
   <%- include('docsmenu') %>
