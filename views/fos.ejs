@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=25">
+  <link rel="stylesheet" href="/css/fos.css?v=26">
 </head>
 <body>
 <%
@@ -44,9 +44,9 @@
 
 <%
   const needsYou = (st==='awaiting_human'||st==='needs_review');
-  const cfgLabels = {overview:'Definition',steps:'Steps',policies:'Policies',tools:'Tools',improve:'Improvement'};
-  const opLabels = {monitor:'Overview',execute:'Execute',flow:'Flow',improve:'Improve',history:'History'};
-  const crumbLast = active==='setup' ? (cfgLabels[section]||'Configure') : (opLabels[active]||'Overview');
+  const cfgLabels = {overview:'Definition',steps:'Steps',policies:'Policies',tools:'Tools'};
+  const opLabels = {monitor:'Overview',execute:'Execute',flow:'Flow',history:'History'};
+  const crumbLast = active==='edit' ? 'Edit' : (active==='setup' ? (cfgLabels[section]||'Configure') : (opLabels[active]||'Overview'));
 %>
 <!-- ── Global topbar (tenant = Organization) ─────────────── -->
 <%- include('partials/topbar', { active: 'processes', org: proc.org.name }) %>
@@ -81,7 +81,7 @@
   <span class="wsub-badge <%= runnable?'bound':'defined' %>"><span class="d"></span><%= engineBound?'Engine-bound':(runnable?'Ready to run':'Defined') %></span>
 </div></div>
 
-<div class="wshell <%= (active==='setup'||active==='history'||active==='flow')?'cfg':'' %>">
+<div class="wshell <%= (active==='setup'||active==='history'||active==='flow'||active==='edit')?'cfg':'' %>">
   <%- include('fos/worknav', {proc,active,section,runnable,run,needsYou}) %>
   <div class="main">
   <% if(typeof justRan !== 'undefined' && justRan && run){ %>
@@ -95,6 +95,8 @@
     <%- include('fos/setup', {proc,section,fmt0,runnable,allTools,subfunctions,orgUnits}) %>
   <% } else if(active==='history'){ %>
     <%- include('fos/history', {proc,historyRuns,run,fmt0,signed}) %>
+  <% } else if(active==='edit'){ %>
+    <%- include('fos/edit', {proc,runs,versions,packageVersions,proposals,fmt0}) %>
   <% } else if(!run && runnable){ %>
     <div class="card pad" style="text-align:center;padding:50px">
       <div class="eyebrow">No runs yet</div>
@@ -121,12 +123,12 @@
   <% } else if(active==='flow'){ %>
     <%- include('fos/flow', {run,proc,fmt0,fmt2,signed,st}) %>
   <% } else { %>
-    <%- include('fos/improve', {s,learn,carriers,proc,fmt0,fmt2,signed,pct,run,proposals,versions}) %>
+    <%- include('fos/overview', {ov:overview,run,summary,proc,frozen,st,runTime,fmt0,fmt2,signed,pct,band}) %>
   <% } %>
   </div>
 
   <!-- ── Event ledger rail ─────────────────────────────── -->
-  <% if(active!=='setup' && active!=='history' && active!=='flow'){ %>
+  <% if(active!=='setup' && active!=='history' && active!=='flow' && active!=='edit'){ %>
   <aside class="rail">
     <div class="card ledger">
       <div class="card-h"><h3>Event Ledger</h3><span class="sub">system of record</span></div>

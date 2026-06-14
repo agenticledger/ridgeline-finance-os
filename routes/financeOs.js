@@ -58,7 +58,7 @@ const TOOL_TYPE_META = {
 };
 
 const router = express.Router();
-const TABS = ['monitor', 'execute', 'flow', 'improve', 'history', 'setup'];
+const TABS = ['monitor', 'execute', 'flow', 'edit', 'history', 'setup'];
 
 async function loadProcessFull(slug) {
   return prisma.process.findFirst({
@@ -96,9 +96,12 @@ async function buildView(req, res, slug, active) {
     ? await prisma.tool.findMany({ orderBy: [{ type: 'asc' }, { name: 'asc' }] })
     : [];
   const orgUnits = active === 'setup' ? await cfg.listOrgUnits(slug) : [];
-  // Improve plane: persisted proposals (scoped to the selected run) + version history.
-  const proposals = active === 'improve' ? await improve.listProposals(slug, { runId: selectedId || null }) : [];
-  const versions = active === 'improve' ? await improve.listVersions(slug) : [];
+  // Edit plane: the audit trail of edits — applied proposals + the versioned
+  // Package history (every process_package snapshot). Proposals are pulled for the
+  // whole process (not a single run) since Edit evaluates across selected runs.
+  const proposals = active === 'edit' ? await improve.listProposals(slug, {}) : [];
+  const versions = active === 'edit' ? await improve.listVersions(slug) : [];
+  const packageVersions = active === 'edit' ? await improve.listPackageVersions(slug) : [];
   // Run history: every run for this process with its headline numbers.
   const historyRuns = active === 'history' ? await listRunHistory(slug) : [];
 
@@ -150,6 +153,7 @@ async function buildView(req, res, slug, active) {
     orgUnits,
     proposals,
     versions,
+    packageVersions,
     historyRuns,
     ownerAgent,
     subfunctions: SUBFUNCTIONS,
@@ -188,6 +192,9 @@ router.post('/api/automator/propose', async (req, res) => {
       messages: Array.isArray(req.body.messages) ? req.body.messages : [],
       scope: req.body.scope || 'whole',
       attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
+      slug: req.body.slug || null,
+      runIds: Array.isArray(req.body.runIds) ? req.body.runIds : [],
+      focus: typeof req.body.focus === 'string' ? req.body.focus : '',
     });
     res.json({ ok: true, data: out });
   } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message || String(e) }); }
@@ -590,24 +597,28 @@ router.post('/run/:runId/freeze', async (req, res, next) => {
 });
 
 // ── Improve plane: reconcile actuals · propose · apply (versioned) ────────────
+// Note: the Improve dashboard was replaced by the Edit experience (chat-driven
+// package edits in the Configure section). These persistence endpoints remain so
+// the applied-proposals + versioned-Package audit trail keeps working; they now
+// land on the Edit tab.
 router.post('/run/:runId/reconcile', async (req, res, next) => {
   try {
     await reconcileRun(req.params.runId, { actor: req.body.actor || 'Reconciliation Agent' });
-    res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/improve?run=${req.params.runId}`);
+    res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/edit`);
   } catch (e) { next(e); }
 });
 
 router.post('/process/:slug/improve/propose', async (req, res, next) => {
   try {
     await improve.generateProposals(req.params.slug, { runId: req.body.run || null });
-    res.redirect(`/process/${req.params.slug}/improve${req.body.run ? `?run=${req.body.run}` : ''}`);
+    res.redirect(`/process/${req.params.slug}/edit`);
   } catch (e) { next(e); }
 });
 
 router.post('/improve/proposal/:proposalId/apply', async (req, res, next) => {
   try {
     await improve.applyProposal(req.params.proposalId, { approvedBy: req.body.actor || 'Controller' });
-    res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/improve${req.body.run ? `?run=${req.body.run}` : ''}`);
+    res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/edit`);
   } catch (e) { next(e); }
 });
 

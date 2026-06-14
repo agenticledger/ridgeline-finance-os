@@ -1,0 +1,278 @@
+<!-- Edit — improve the process package via the same owner agent that built it.
+     Select runs to evaluate (+ optional focus), the agent proposes a blueprint of
+     changes to steps/policies/engines/tools, you review and apply. Apply cuts a new
+     versioned Package snapshot. Below: the audit trail (Package history + applied
+     proposals + policy versions). -->
+<%
+  const runList = runs || [];
+  const props = proposals || [];
+  const pkgVers = packageVersions || [];
+  const vers = versions || [];
+  const slug = proc.slug;
+  const statusChip = {pending:'review', applied:'auto_post', dismissed:'escalate'};
+%>
+
+<section class="card edit-intro">
+  <div class="card-h">
+    <h3>Edit the package</h3>
+    <span class="sub">same owner agent &middot; suggests updates to steps, policies, engines &amp; tools</span>
+  </div>
+  <div class="card-b">
+    <p class="hint" style="margin:0">Pick the runs you want the agent to learn from, add an optional focus, and it will propose concrete improvements to this process. Review the blueprint on the right, then apply &mdash; every applied edit cuts a new versioned <b>Package</b>.</p>
+  </div>
+</section>
+
+<div class="autowrap edit-wrap">
+  <!-- LEFT: run selection + focus + chat -->
+  <section class="autochat">
+    <div class="edit-pick">
+      <div class="edit-pick-h">
+        <span class="auto-lab">Runs to evaluate</span>
+        <% if (runList.length) { %><button type="button" class="edit-all" id="selAll">Select all</button><% } %>
+      </div>
+      <% if (!runList.length) { %>
+        <p class="hint" style="margin:6px 0 0">No runs yet. Execute a run first, then come back to evaluate it.</p>
+      <% } else { %>
+        <div class="edit-runs" id="runs">
+          <% runList.forEach(function(r){ %>
+            <label class="edit-run">
+              <input type="checkbox" name="runId" value="<%= r.id %>">
+              <span class="er-per"><%= r.period %></span>
+              <span class="chip <%= r.status==='posted'||r.status==='reconciled'?'auto_post':(r.status==='awaiting_human'||r.status==='needs_review'?'escalate':'review') %>"><%= r.status.replace(/_/g,' ') %></span>
+              <span class="er-tot"><%= fmt0(r.totalAccrual) %></span>
+            </label>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+
+    <label class="edit-focus-field">
+      <span class="auto-lab">Focus (optional)</span>
+      <textarea id="focus" rows="2" placeholder="e.g. the coastal carrier keeps under-accruing, or tighten the materiality gate"></textarea>
+    </label>
+
+    <button type="button" class="btn primary edit-eval" id="evalBtn" <%= runList.length?'':'disabled' %>>Evaluate selected runs &amp; suggest improvements</button>
+
+    <div class="auto-thread" id="thread">
+      <div class="auto-msg bot">
+        <div class="auto-bubble">
+          I own and engineer this process. Select the runs you want me to study, add a focus if you have one, and I'll suggest concrete improvements to its steps, policies, engines, or tools. You can keep refining with me before you apply anything.
+        </div>
+      </div>
+    </div>
+
+    <form class="auto-composer" id="composer">
+      <textarea id="input" rows="2" placeholder="Refine the suggestion, ask why, or steer the changes..."></textarea>
+      <button class="btn primary" type="submit" id="sendBtn">Send</button>
+    </form>
+  </section>
+
+  <!-- RIGHT: proposed blueprint -->
+  <aside class="autopreview" id="preview">
+    <div class="auto-empty" id="previewEmpty">
+      <div class="ae-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
+      <p>The proposed changes will appear here once I've studied the runs. Review them, refine in the chat, then apply to cut a new Package version.</p>
+    </div>
+    <div id="previewBody" hidden></div>
+    <div class="auto-applybar" id="applyBar" hidden>
+      <button class="btn primary" id="applyBtn" type="button">Apply &amp; version package</button>
+      <span class="auto-applynote" id="applyNote"></span>
+    </div>
+  </aside>
+</div>
+
+<!-- ── Audit trail: versioned Package history ── -->
+<% if (pkgVers.length) { %>
+<section class="card">
+  <div class="card-h"><h3>Package history</h3><span class="sub">every versioned snapshot &middot; <%= pkgVers.length %> version<%= pkgVers.length===1?'':'s' %></span></div>
+  <table class="grid">
+    <thead><tr><th class="num">Version</th><th>Note</th><th class="num">Steps</th><th class="num">Policies</th><th class="num">Tools</th><th>By</th><th>When</th></tr></thead>
+    <tbody>
+      <% pkgVers.forEach(function(v){ %>
+      <tr>
+        <td class="num">v<%= v.version %><%= v.initial?' <span class="chip auto_post">born</span>':'' %></td>
+        <td><%= v.note || '--' %></td>
+        <td class="num"><%= v.steps==null?'--':v.steps %></td>
+        <td class="num"><%= v.policies==null?'--':v.policies %></td>
+        <td class="num"><%= v.tools==null?'--':v.tools %></td>
+        <td><%= v.approvedBy || '--' %></td>
+        <td><%= v.approvedAt ? new Date(v.approvedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '--' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</section>
+<% } %>
+
+<!-- ── Applied proposals — the param-level edit record ── -->
+<% if (props.length) { %>
+<section class="card">
+  <div class="card-h"><h3>Applied improvements</h3><span class="sub">param-level edits, newest first</span></div>
+  <div class="card-b">
+    <div class="proplist">
+      <% props.forEach(function(p){ var t=p.target||{}; %>
+      <div class="propcard">
+        <div class="prop-head">
+          <span class="chip <%= statusChip[p.status]||'review' %>"><%= p.status %></span>
+          <span class="prop-comp"><%= p.lever %> &middot; <%= p.component %></span>
+        </div>
+        <div class="prop-diag"><%= p.diagnosis %></div>
+        <% if (t.policyKey) { %>
+          <div class="prop-target"><code><%= t.policyKey %>.<%= t.param %></code>: <%= t.from %> &rarr; <strong><%= t.to %></strong></div>
+        <% } %>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<!-- ── Policy version history — immutable ObjectVersion audit ── -->
+<% if (vers.length) { %>
+<section class="card">
+  <div class="card-h"><h3>Policy version history</h3><span class="sub">immutable ObjectVersion audit &middot; <%= vers.length %> change<%= vers.length===1?'':'s' %></span></div>
+  <table class="grid">
+    <thead><tr><th>Policy</th><th>Change</th><th class="num">Version</th><th>Source</th><th>Approved by</th><th>When</th></tr></thead>
+    <tbody>
+      <% vers.forEach(function(v){ var d=v.diff||{}; %>
+      <tr>
+        <td><%= v.policyName %></td>
+        <td><code><%= d.param %></code>: <%= d.before %> &rarr; <strong><%= d.after %></strong></td>
+        <td class="num">v<%= v.version %></td>
+        <td><span class="chip auto_post"><%= v.source %></span></td>
+        <td><%= v.approvedBy || '--' %></td>
+        <td><%= v.approvedAt ? new Date(v.approvedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '--' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</section>
+<% } %>
+
+<script>
+(function(){
+  var SLUG = <%- JSON.stringify(slug) %>;
+  var thread=document.getElementById('thread');
+  var composer=document.getElementById('composer');
+  var input=document.getElementById('input');
+  var sendBtn=document.getElementById('sendBtn');
+  var evalBtn=document.getElementById('evalBtn');
+  var focusEl=document.getElementById('focus');
+  var runsBox=document.getElementById('runs');
+  var selAll=document.getElementById('selAll');
+  var previewEmpty=document.getElementById('previewEmpty');
+  var previewBody=document.getElementById('previewBody');
+  var applyBar=document.getElementById('applyBar');
+  var applyBtn=document.getElementById('applyBtn');
+  var applyNote=document.getElementById('applyNote');
+
+  var messages=[];      // {role, content}
+  var blueprint=null;
+
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function selectedRunIds(){return runsBox?[].slice.call(runsBox.querySelectorAll('input[name=runId]:checked')).map(function(i){return i.value;}):[];}
+
+  if(selAll){selAll.addEventListener('click',function(){
+    var boxes=runsBox.querySelectorAll('input[name=runId]');
+    var allOn=[].every.call(boxes,function(b){return b.checked;});
+    [].forEach.call(boxes,function(b){b.checked=!allOn;});
+    selAll.textContent=allOn?'Select all':'Clear all';
+  });}
+
+  function addMsg(role,text){
+    var wrap=document.createElement('div');
+    wrap.className='auto-msg '+(role==='user'?'me':'bot');
+    var b=document.createElement('div'); b.className='auto-bubble'; b.textContent=text;
+    wrap.appendChild(b); thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
+    return wrap;
+  }
+
+  function badge(t){return '<span class="bp-badge '+t+'">'+t.replace('_',' ')+'</span>';}
+
+  function renderPreview(bp){
+    if(!bp){previewEmpty.hidden=false;previewBody.hidden=true;applyBar.hidden=true;return;}
+    previewEmpty.hidden=true;previewBody.hidden=false;applyBar.hidden=false;
+    var h='';
+    if(bp.definition){
+      var d=bp.definition;
+      h+='<div class="bp-sec"><h3>Definition</h3><div class="bp-def">'+
+         '<div class="bp-name">'+esc(d.name||'(unnamed)')+'</div>'+
+         '<div class="bp-meta">'+esc(d.frequency||'monthly')+' &middot; '+esc(d.mode||'manual')+(d.functionSlug?(' &middot; '+esc(d.functionSlug)):'')+'</div>'+
+         (d.description?'<p class="bp-desc">'+esc(d.description)+'</p>':'')+'</div></div>';
+    }
+    if(bp.steps&&bp.steps.length){
+      h+='<div class="bp-sec"><h3>Steps <span class="bp-n">'+bp.steps.length+'</span></h3><ol class="bp-steps">';
+      bp.steps.forEach(function(s){
+        h+='<li><div class="bp-srow"><b>'+esc(s.name)+'</b> '+badge(s.decisionType||'policy_based')+
+           (s.isGate?' <span class="bp-badge gate">gate</span>':'')+(s.pauseAfter?' <span class="bp-badge pause">pause</span>':'')+'</div>'+
+           (s.description?'<p>'+esc(s.description)+'</p>':'')+'</li>';
+      });
+      h+='</ol></div>';
+    }
+    if(bp.policies&&bp.policies.length){
+      h+='<div class="bp-sec"><h3>Policies <span class="bp-n">'+bp.policies.length+'</span></h3>';
+      bp.policies.forEach(function(p){
+        h+='<div class="bp-pol"><b>'+esc(p.name)+'</b>'+(p.definition?'<p>'+esc(p.definition)+'</p>':'');
+        var keys=p.params?Object.keys(p.params):[];
+        if(keys.length){h+='<div class="bp-params">';keys.forEach(function(k){h+='<span class="bp-param"><i>'+esc(k)+'</i> '+esc(String(p.params[k]))+'</span>';});h+='</div>';}
+        h+='</div>';
+      });
+      h+='</div>';
+    }
+    if(bp.tools&&bp.tools.length){
+      h+='<div class="bp-sec"><h3>Tools <span class="bp-n">'+bp.tools.length+'</span></h3><div class="bp-tools">';
+      bp.tools.forEach(function(t){h+='<span class="bp-tool">'+esc(t.slug)+(t.role?(' &middot; '+esc(t.role)):'')+'</span>';});
+      h+='</div></div>';
+    }
+    if(bp.improve){h+='<div class="bp-sec"><h3>Improve</h3><div class="bp-def"><div class="bp-meta">'+esc(bp.improve.mode)+' &middot; last '+esc(String(bp.improve.lookbackRuns))+' runs</div></div></div>';}
+    previewBody.innerHTML=h;
+    applyNote.textContent='Applies to this process and cuts a new Package version.';
+  }
+
+  function send(payload, userLabel, busyEl, busyText, restoreText){
+    addMsg('user',userLabel);
+    var bot=addMsg('bot','Studying...');
+    busyEl.disabled=true; var prev=busyEl.textContent; busyEl.textContent=busyText;
+    fetch('/api/automator/propose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        busyEl.disabled=false; busyEl.textContent=restoreText||prev;
+        if(!j.ok){bot.querySelector('.auto-bubble').textContent='Error: '+(j.error||'request failed');return;}
+        var d=j.data;
+        bot.querySelector('.auto-bubble').textContent=d.message||'(no message)';
+        messages.push({role:'assistant',content:d.message||''});
+        if(d.ready&&d.blueprint){blueprint=d.blueprint;renderPreview(blueprint);}
+      })
+      .catch(function(err){busyEl.disabled=false;busyEl.textContent=restoreText||prev;bot.querySelector('.auto-bubble').textContent='Network error: '+err.message;});
+  }
+
+  evalBtn && evalBtn.addEventListener('click',function(){
+    var ids=selectedRunIds();
+    if(!ids.length){addMsg('bot','Pick at least one run to evaluate first.');return;}
+    var focus=(focusEl.value||'').trim();
+    var label='Evaluate '+ids.length+' run'+(ids.length>1?'s':'')+(focus?(' — focus: '+focus):'')+'.';
+    messages.push({role:'user',content:label});
+    send({messages:messages,slug:SLUG,runIds:ids,focus:focus}, label, evalBtn, 'Studying runs...', 'Re-evaluate selected runs');
+  });
+
+  composer.addEventListener('submit',function(e){
+    e.preventDefault();
+    var text=input.value.trim(); if(!text)return;
+    input.value='';
+    messages.push({role:'user',content:text});
+    send({messages:messages,slug:SLUG,runIds:selectedRunIds(),focus:(focusEl.value||'').trim()}, text, sendBtn, 'Thinking...', 'Send');
+  });
+
+  applyBtn.addEventListener('click',function(){
+    if(!blueprint)return;
+    applyBtn.disabled=true;applyBtn.textContent='Applying...';
+    fetch('/api/automator/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blueprint:blueprint,slug:SLUG})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j.ok){applyBtn.disabled=false;applyBtn.textContent='Apply &amp; version package';applyNote.textContent='Error: '+(j.error||'apply failed');return;}
+        window.location.href='/process/'+SLUG+'/edit';
+      })
+      .catch(function(err){applyBtn.disabled=false;applyBtn.textContent='Apply & version package';applyNote.textContent='Network error: '+err.message;});
+  });
+})();
+</script>

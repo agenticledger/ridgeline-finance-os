@@ -16,6 +16,7 @@ const { getProviderByName } = require('../llm');
 const { createProcess, SUBFUNCTIONS } = require('./processService');
 const cfg = require('./configService');
 const builder = require('../builder/processBuilder');
+const runService = require('./runService');
 
 const SCOPES = ['whole', 'definition', 'steps', 'policies', 'tools'];
 
@@ -155,9 +156,61 @@ function sanitizeBlueprint(bp) {
   return out;
 }
 
+// Build the EDIT-mode context: the current package plus a compact summary of the
+// runs the operator selected to evaluate, and their optional focus. This is what
+// turns "create" into "edit/improve" — same agent, same blueprint contract, but
+// grounded in what the process already is and how its recent runs actually went.
+async function buildEditContext(slug, runIds = [], focus = '') {
+  const cfgObj = await cfg.getProcessConfig(slug).catch(() => null);
+  const lines = [];
+  if (cfgObj) {
+    lines.push(`CURRENT PACKAGE — ${cfgObj.name} (${cfgObj.frequency} · ${cfgObj.mode}${cfgObj.function ? ` · ${cfgObj.function.slug}` : ''})`);
+    if (cfgObj.description) lines.push(`  ${cfgObj.description}`);
+    lines.push('  Steps:');
+    (cfgObj.steps || []).forEach((s) => {
+      const tags = [s.decisionType, s.isGate ? 'gate' : null, s.pauseAfter ? 'pause' : null, s.engineSource ? `engine:${s.engineSource}` : null].filter(Boolean).join(', ');
+      lines.push(`    ${s.order}. ${s.name} (${tags})`);
+      (s.policies || []).forEach((p) => lines.push(`        policy ${p.key} v${p.version} params=${JSON.stringify(p.params || {})}`));
+    });
+    if ((cfgObj.policies || []).length) {
+      lines.push('  Process-scope policies:');
+      cfgObj.policies.forEach((p) => lines.push(`    ${p.key} v${p.version} params=${JSON.stringify(p.params || {})}`));
+    }
+    if ((cfgObj.tools || []).length) lines.push(`  Tools: ${cfgObj.tools.map((t) => t.slug).filter(Boolean).join(', ')}`);
+  }
+
+  const runs = [];
+  for (const id of (runIds || [])) {
+    const r = await runService.getRun(id).catch(() => null);
+    if (r) runs.push(r);
+  }
+  if (runs.length) {
+    lines.push('', `SELECTED RUNS TO EVALUATE (${runs.length}):`);
+    runs.forEach((r) => {
+      const sum = r.summary || {};
+      const carriers = sum.carriers || [];
+      const exCount = (r.exceptions || []).length;
+      const openItems = (r.actionItems || []).filter((a) => a.status === 'open').length;
+      const totalItems = (r.actionItems || []).length;
+      lines.push(`  - ${r.period} · ${r.status} · total ${r.totalAccrual != null ? '$' + Math.round(r.totalAccrual).toLocaleString('en-US') : 'n/a'} · ${exCount} exception(s) · ${openItems}/${totalItems} action items open`);
+      carriers.slice(0, 6).forEach((c) => {
+        if (c.denise != null && c.point != null) {
+          const diff = c.point - c.denise;
+          lines.push(`      ${c.label || c.key}: point ${Math.round(c.point)}, Denise ${Math.round(c.denise)}, delta ${diff >= 0 ? '+' : ''}${Math.round(diff)}${c.actual != null ? `, actual ${Math.round(c.actual)}` : ''}`);
+        }
+      });
+    });
+  }
+
+  lines.push('', `OPERATOR FOCUS: ${focus && focus.trim() ? focus.trim() : '(none — use your judgment on what to improve)'}`);
+  return lines.join('\n');
+}
+
 // Phase 1 — propose. messages is the running chat [{role,content}]. attachments
-// are pasted source docs [{name, text}] folded into the latest user turn.
-async function propose({ messages = [], scope = 'whole', attachments = [] } = {}) {
+// are pasted source docs [{name, text}] folded into the latest user turn. When a
+// slug is supplied the call is in EDIT mode: the current package and the selected
+// runs are injected as grounding so the same agent proposes improvements.
+async function propose({ messages = [], scope = 'whole', attachments = [], slug = null, runIds = [], focus = '' } = {}) {
   if (!SCOPES.includes(scope)) scope = 'whole';
   const { provider, model, apiKey } = await resolveLlm();
   if (!apiKey) {
@@ -165,7 +218,7 @@ async function propose({ messages = [], scope = 'whole', attachments = [] } = {}
   }
 
   const [tools, subfunctions] = await Promise.all([cfg.listTools(), Promise.resolve(cfg.listSubfunctions())]);
-  const system = buildSystemPrompt({ scope, tools, subfunctions });
+  let system = buildSystemPrompt({ scope, tools, subfunctions });
 
   const chat = messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') }));
   if (attachments.length) {
@@ -173,6 +226,14 @@ async function propose({ messages = [], scope = 'whole', attachments = [] } = {}
     const lastUser = [...chat].reverse().find((m) => m.role === 'user');
     if (lastUser) lastUser.content += `\n\nAttached source documents:\n${docBlock}`;
     else chat.push({ role: 'user', content: `Attached source documents:\n${docBlock}` });
+  }
+
+  if (slug) {
+    const editCtx = await buildEditContext(slug, runIds, focus);
+    system += `\n\nEDIT MODE. You are improving an EXISTING process, not building a new one. Below is the current package and the runs the operator chose to evaluate. Propose concrete, justified improvements to the steps, policies, engines, or tools. In the blueprint, return the FULL updated set for any section you change (the whole steps array, the whole policies array, etc.) and keep the parts you are not changing intact. Tie each change back to evidence in the runs or the operator's focus.\n\n${editCtx}`;
+    if (!chat.some((m) => m.role === 'user')) {
+      chat.push({ role: 'user', content: focus && focus.trim() ? `Evaluate the selected runs and suggest improvements. Focus: ${focus.trim()}` : 'Evaluate the selected runs and suggest improvements.' });
+    }
   }
 
   const provObj = getProviderByName(provider);

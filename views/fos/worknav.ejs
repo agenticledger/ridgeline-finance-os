@@ -4,13 +4,15 @@
     { tab:'monitor', label:'Overview',  icon:'gauge' },
     { tab:'execute', label:'Execute',   icon:'play' },
     { tab:'flow',    label:'Flow',      icon:'flow' },
-    { tab:'improve', label:'Improve',   icon:'trend' },
     { tab:'history', label:'History',   icon:'history' },
   ];
+  // Configure items: 'sec' entries link to /setup?section=, 'tab' entries link to /process/:slug/:tab.
   const cfgItems = [
     { sec:'overview',  label:'Definition',  icon:'doc' },
     { sec:'steps',     label:'Steps',       icon:'list' },
+    { tab:'edit',      label:'Edit',        icon:'sliders' },
   ];
+  const inConfigure = (active==='setup' || active==='edit');
   const ic = {
     gauge:'<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
     play:'<polygon points="6 4 20 12 6 20 6 4"/>',
@@ -25,11 +27,11 @@
   };
 %>
 <nav class="worknav">
-  <% if(active==='setup'){ %>
+  <% if(inConfigure){ %>
     <div class="wn-group">
       <div class="wn-label">Configure</div>
-      <% cfgItems.forEach(function(c){ var on = (section===c.sec); %>
-        <a class="wn-item cfg <%= on?'on':'' %>" href="/process/<%= proc.slug %>/setup?section=<%= c.sec %>">
+      <% cfgItems.forEach(function(c){ var on = c.tab ? (active===c.tab) : (active==='setup' && section===c.sec); var href = c.tab ? ('/process/'+proc.slug+'/'+c.tab) : ('/process/'+proc.slug+'/setup?section='+c.sec); %>
+        <a class="wn-item cfg <%= on?'on':'' %>" href="<%= href %>">
           <span class="wn-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><%- ic[c.icon] %></svg></span>
           <span><%= c.label %></span>
         </a>

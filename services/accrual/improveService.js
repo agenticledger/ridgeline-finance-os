@@ -178,4 +178,30 @@ async function listVersions(slug = PROCESS_SLUG) {
   return versions.map((v) => ({ ...v, policyName: byId[v.objectId] ? byId[v.objectId].name : v.objectId, policyKey: byId[v.objectId] ? byId[v.objectId].key : null }));
 }
 
-module.exports = { generateProposals, applyProposal, listProposals, listVersions, PROCESS_SLUG };
+// Package history — every process_package snapshot (the audit trail of edits).
+// Each row is one versioned Package: a whole-process snapshot of steps, policies
+// and tools, cut by the owner agent on create (v1) and on every applied edit.
+async function listPackageVersions(slug = PROCESS_SLUG) {
+  const process = await prisma.process.findFirst({ where: { slug }, select: { id: true } });
+  if (!process) return [];
+  const versions = await prisma.objectVersion.findMany({
+    where: { objectType: 'process_package', objectId: process.id }, orderBy: { version: 'desc' },
+  });
+  return versions.map((v) => {
+    const d = v.diff || {};
+    const snap = d.snapshot || {};
+    return {
+      version: v.version,
+      note: d.note || '',
+      initial: !!d.initial,
+      steps: Array.isArray(snap.steps) ? snap.steps.length : null,
+      policies: Array.isArray(snap.policies) ? snap.policies.length : null,
+      tools: Array.isArray(snap.tools) ? snap.tools.length : null,
+      source: v.source,
+      approvedBy: v.approvedBy,
+      approvedAt: v.approvedAt,
+    };
+  });
+}
+
+module.exports = { generateProposals, applyProposal, listProposals, listVersions, listPackageVersions, PROCESS_SLUG };

@@ -824,12 +824,15 @@ const API_GROUPS = [
     endpoints: [
       {
         op: 'automator_propose', method: 'POST', path: '/api/automator/propose', auth: 'none',
-        summary: 'Draft or refine a process blueprint from a chat transcript. Returns clarifying questions (ready=false) or a sanitized blueprint (ready=true).',
+        summary: 'Draft or refine a process blueprint from a chat transcript. Returns clarifying questions (ready=false) or a sanitized blueprint (ready=true). In EDIT mode (pass slug + runIds + focus) the current package and selected runs are injected so the same agent proposes improvements to an existing process.',
         params: [],
         body: [
           { name: 'messages', type: 'array', required: true, desc: 'Running chat as [{ role: "user"|"assistant", content }].' },
           { name: 'scope', type: 'string', required: false, desc: 'whole | definition | steps | policies | tools. Default whole.' },
           { name: 'attachments', type: 'array', required: false, desc: 'Source docs as [{ name, text }], folded into the latest user turn.' },
+          { name: 'slug', type: 'string', required: false, desc: 'EDIT mode: the existing process to improve. Injects its current package as grounding.' },
+          { name: 'runIds', type: 'array', required: false, desc: 'EDIT mode: run ids the agent should evaluate; their outcomes are summarized into the prompt.' },
+          { name: 'focus', type: 'string', required: false, desc: 'EDIT mode: optional steer appended to the prompt so the agent focuses on a specific concern.' },
         ],
         returns: '{ ready, message, blueprint, scope } \u2014 blueprint is null until ready is true.',
       },
