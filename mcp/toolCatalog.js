@@ -47,9 +47,28 @@ const TOOL_GROUPS = [
         ],
       },
       {
+        name: 'run_action_items', group: 'runs', title: 'List a run\u2019s action items', sideEffect: 'none',
+        mapsTo: 'GET /api/fos/run/:id/actions',
+        description: 'Return the per-item overseer queue for a run. Each item must be cleared (approved or marked N/A) before the run can be signed off. Use this to see what is blocking sign-off.',
+        args: [
+          { name: 'runId', type: 'string', required: true, default: null, desc: 'Run id to list action items for.' },
+        ],
+      },
+      {
+        name: 'run_clear_action', group: 'runs', title: 'Clear an action item', sideEffect: 'writes',
+        mapsTo: 'POST /api/fos/run/:id/action/:itemId/clear',
+        description: 'Clear a single action item by approving it or marking it N/A, with an optional note. Clearing every item unlocks the run for sign-off.',
+        args: [
+          { name: 'itemId', type: 'string', required: true, default: null, desc: 'Action item id to clear.' },
+          { name: 'status', type: 'enum(approved|na)', required: true, default: null, desc: 'Disposition: approved or na.' },
+          { name: 'note', type: 'string', required: false, default: '', desc: 'Optional note recorded on the item + audit trail.' },
+          { name: 'actor', type: 'string', required: false, default: 'Controller', desc: 'Who is clearing the item.' },
+        ],
+      },
+      {
         name: 'run_sign_off', group: 'runs', title: 'Sign off and post the JE', sideEffect: 'writes',
         mapsTo: 'POST /api/fos/run/:id/signoff',
-        description: 'Human-in-the-loop approval. Advances a run that is awaiting_human or needs_review: posts the staged balanced journal entry and records the sign-off on the event ledger.',
+        description: 'Human-in-the-loop approval. Advances a run that is awaiting_human or needs_review: posts the staged balanced journal entry and records the sign-off on the event ledger. Blocked until every action item is cleared (see run_action_items / run_clear_action).',
         args: [
           { name: 'runId', type: 'string', required: true, default: null, desc: 'Run id to sign off.' },
           { name: 'actor', type: 'string', required: false, default: 'Controller', desc: 'Approver name.' },

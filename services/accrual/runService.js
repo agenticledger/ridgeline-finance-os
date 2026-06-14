@@ -234,6 +234,23 @@ async function executeRun({ period = 'April 2026', mode = 'manual', actor = 'Acc
     });
   }
 
+  // Persist action items (per-item overseer queue — each must be cleared to sign off)
+  const queue = (result.control && result.control.overseerQueue) || [];
+  if (queue.length) {
+    await prisma.actionItem.createMany({
+      data: queue.map((q, i) => ({
+        runId: run.id,
+        kind: q.kind || 'item',
+        severity: q.severity || 'warning',
+        title: q.label,
+        detail: q.detail || null,
+        amount: q.dollar != null ? q.dollar : null,
+        status: 'open',
+        ord: i,
+      })),
+    });
+  }
+
   // Event ledger (append-only system of record)
   const events = (result.events || []).slice().reverse(); // back to chronological for insert order
   await prisma.ledgerEvent.create({ data: { runId: run.id, actor, action: 'RUN_STARTED', detail: { period, mode } } });
@@ -259,6 +276,16 @@ async function signOff(runId, { actor = 'Controller', note = '' } = {}) {
     return { runId, status: run.status, alreadyPosted: true };
   }
 
+  // Gate: every action item must be cleared (approved or marked N/A) before sign-off.
+  const open = await prisma.actionItem.count({ where: { runId, status: 'open' } });
+  if (open > 0) {
+    const err = new Error(`Cannot sign off: ${open} action item${open === 1 ? '' : 's'} still need to be cleared (approve or mark N/A) first.`);
+    err.status = 409;
+    err.code = 'ACTION_ITEMS_OPEN';
+    err.openCount = open;
+    throw err;
+  }
+
   // Advance the post_je step
   const postStep = await prisma.stepExecution.findFirst({ where: { runId, key: 'post_je' } });
   if (postStep) {
@@ -278,6 +305,39 @@ async function signOff(runId, { actor = 'Controller', note = '' } = {}) {
   });
 
   return { runId, status: 'posted', point: run.totalAccrual };
+}
+
+// ── Clear a single action item: approve it or mark it N/A (with optional note) ─
+async function clearActionItem(itemId, { status, note = '', actor = 'Controller' } = {}) {
+  const norm = String(status || '').toLowerCase();
+  if (norm !== 'approved' && norm !== 'na') {
+    const err = new Error('status must be "approved" or "na"');
+    err.status = 400;
+    throw err;
+  }
+  const item = await prisma.actionItem.findUnique({ where: { id: itemId }, include: { run: true } });
+  if (!item) {
+    const err = new Error('Action item not found');
+    err.status = 404;
+    throw err;
+  }
+  if (item.run && item.run.frozen) {
+    const err = new Error('Run is frozen — cannot modify action items.');
+    err.status = 409;
+    throw err;
+  }
+  const updated = await prisma.actionItem.update({
+    where: { id: itemId },
+    data: { status: norm, note: note || null, clearedBy: actor, clearedAt: new Date() },
+  });
+  await prisma.ledgerEvent.create({
+    data: {
+      runId: item.runId, actor, action: 'ACTION_ITEM_CLEARED',
+      detail: { itemId, title: item.title, disposition: norm === 'na' ? 'Marked N/A' : 'Approved', note },
+    },
+  });
+  const open = await prisma.actionItem.count({ where: { runId: item.runId, status: 'open' } });
+  return { item: updated, openCount: open };
 }
 
 // ── Freeze: lock the run immutable (period close) ─────────────────────────────
@@ -300,6 +360,7 @@ async function getRun(runId) {
       exceptions: { orderBy: { severity: 'asc' } },
       events: { orderBy: { createdAt: 'desc' } },
       reconciliations: true,
+      actionItems: { orderBy: { ord: 'asc' } },
     },
   });
 }
@@ -346,4 +407,4 @@ async function listRunHistory(processSlug = PROCESS_SLUG) {
   });
 }
 
-module.exports = { executeRun, signOff, freezeRun, getRun, listRuns, listRunHistory, loadProcessContext, PROCESS_SLUG };
+module.exports = { executeRun, signOff, freezeRun, clearActionItem, getRun, listRuns, listRunHistory, loadProcessContext, PROCESS_SLUG };

@@ -13,7 +13,7 @@
 const express = require('express');
 const path = require('path');
 const prisma = require('../services/db');
-const { signOff, freezeRun, getRun, listRuns, listRunHistory, PROCESS_SLUG } = require('../services/accrual/runService');
+const { signOff, freezeRun, clearActionItem, getRun, listRuns, listRunHistory, PROCESS_SLUG } = require('../services/accrual/runService');
 const { runProcess } = require('../services/runner/processRunner');
 const { buildOverview } = require('../services/runner/overviewBuilder');
 const { generateInsight } = require('../services/runner/insightService');
@@ -143,6 +143,7 @@ async function buildView(req, res, slug, active) {
     runnable,
     engineBound,
     justRan: !!req.query.ran,
+    notice: req.query.err ? { tone: 'warn', text: String(req.query.err) } : null,
     runs,
     run,
     allTools,
@@ -555,11 +556,30 @@ router.post('/process/:slug/insight', async (req, res) => {
   } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message || String(e) }); }
 });
 
+// Clear a single action item — approve it or mark it N/A. Each must be cleared
+// before the run can be signed off (the sign-off gate).
+router.post('/run/:runId/action/:itemId/clear', async (req, res, next) => {
+  try {
+    await clearActionItem(req.params.itemId, { status: req.body.status, note: req.body.note || '', actor: req.body.actor || 'Controller' });
+    res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/monitor?run=${req.params.runId}`);
+  } catch (e) {
+    if (e.status === 400 || e.status === 409) {
+      return res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/monitor?run=${req.params.runId}&err=${encodeURIComponent(e.message)}`);
+    }
+    next(e);
+  }
+});
+
 router.post('/run/:runId/signoff', async (req, res, next) => {
   try {
     await signOff(req.params.runId, { actor: req.body.actor || 'Controller', note: req.body.note || '' });
     res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/monitor?run=${req.params.runId}`);
-  } catch (e) { next(e); }
+  } catch (e) {
+    if (e.status === 409) {
+      return res.redirect(`/process/${req.body.slug || PROCESS_SLUG}/monitor?run=${req.params.runId}&err=${encodeURIComponent(e.message)}`);
+    }
+    next(e);
+  }
 });
 
 router.post('/run/:runId/freeze', async (req, res, next) => {

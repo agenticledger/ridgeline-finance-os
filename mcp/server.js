@@ -25,7 +25,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { z } = require('zod');
 
 const {
-  executeRun, signOff, freezeRun, getRun, listRuns, PROCESS_SLUG,
+  executeRun, signOff, freezeRun, clearActionItem, getRun, listRuns, PROCESS_SLUG,
 } = require('../services/accrual/runService');
 const { reconcileRun } = require('../services/accrual/reconcileService');
 const improve = require('../services/accrual/improveService');
@@ -100,13 +100,48 @@ server.registerTool(
   },
 );
 
+// ── 3b. List a run's action items (the per-item overseer queue) ────────────────
+server.registerTool(
+  'run_action_items',
+  {
+    title: 'List a run\u2019s action items',
+    description:
+      'Return the per-item overseer queue for a run. Each item must be cleared (approved or marked N/A) before the run can be signed off. Use this to see what is blocking sign-off.',
+    inputSchema: { runId: z.string().describe('Run id to list action items for.') },
+  },
+  async ({ runId }) => {
+    try {
+      const items = await prisma.actionItem.findMany({ where: { runId }, orderBy: { ord: 'asc' } });
+      const open = items.filter((i) => i.status === 'open').length;
+      return text({ runId, open, total: items.length, items: items.map((i) => ({ id: i.id, severity: i.severity, title: i.title, detail: i.detail, amount: i.amount, status: i.status, note: i.note, clearedBy: i.clearedBy })) });
+    } catch (e) { return fail(e); }
+  },
+);
+
+// ── 3c. Clear a single action item (approve or mark N/A) ──────────────────────
+server.registerTool(
+  'run_clear_action',
+  {
+    title: 'Clear an action item',
+    description:
+      'Clear a single action item by approving it or marking it N/A, with an optional note. Clearing every item unlocks the run for sign-off.',
+    inputSchema: {
+      itemId: z.string().describe('Action item id to clear.'),
+      status: z.enum(['approved', 'na']).describe('Disposition: approved or na (not applicable).'),
+      note: z.string().default('').describe('Optional note recorded on the item + audit trail.'),
+      actor: z.string().default('Controller').describe('Who is clearing the item.'),
+    },
+  },
+  async ({ itemId, status, note, actor }) => { try { return text(await clearActionItem(itemId, { status, note, actor })); } catch (e) { return fail(e); } },
+);
+
 // ── 4. Sign off (post the staged JE) ──────────────────────────────────────────
 server.registerTool(
   'run_sign_off',
   {
     title: 'Sign off and post the JE',
     description:
-      'Human-in-the-loop approval. Advances a run that is awaiting_human or needs_review: posts the staged balanced journal entry and records the sign-off on the event ledger. This is the "go on" gate.',
+      'Human-in-the-loop approval. Advances a run that is awaiting_human or needs_review: posts the staged balanced journal entry and records the sign-off on the event ledger. This is the "go on" gate. Blocked until every action item is cleared (see run_action_items / run_clear_action).',
     inputSchema: {
       runId: z.string().describe('Run id to sign off.'),
       actor: z.string().default('Controller').describe('Approver name for the audit trail.'),

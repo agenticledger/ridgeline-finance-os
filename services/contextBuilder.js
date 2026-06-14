@@ -46,7 +46,10 @@ async function buildContext(params) {
         systemPrompt += `\nLatest run: ${run.period} — status ${run.status}${run.frozen ? ' (frozen)' : ''}.`;
         systemPrompt += `\nPoint estimate ${m(s.point)} (90% band ${m(s.low)}–${m(s.high)}). Denise trailing-avg benchmark ${m(s.denise)}; delta ${s.vsDenise >= 0 ? '+' : ''}${m(s.vsDenise)}.`;
         systemPrompt += `\nMateriality gate: ${disp.auto_post || 0} auto-post, ${disp.review || 0} review, ${disp.escalate || 0} escalate.`;
-        if (run.status === 'awaiting_human') systemPrompt += `\nACTION NEEDED: the run is paused awaiting human sign-off before the journal entry posts.`;
+        const openItems = (run.actionItems || []).filter((i) => i.status === 'open').length;
+        const totalItems = (run.actionItems || []).length;
+        if (totalItems) systemPrompt += `\nAction items: ${openItems} of ${totalItems} still open (each must be cleared — approved or marked N/A — before sign-off). Use fos__action_items to list them and fos__clear_action to clear one.`;
+        if (run.status === 'awaiting_human') systemPrompt += `\nACTION NEEDED: the run is paused awaiting human sign-off before the journal entry posts.${openItems ? ` Sign-off is blocked until the ${openItems} open action item${openItems === 1 ? '' : 's'} are cleared.` : ''}`;
         systemPrompt += `\nRun count: ${runs.length}. Always confirm specifics with a fos__ tool call before stating numbers.`;
       }
     } catch (err) {

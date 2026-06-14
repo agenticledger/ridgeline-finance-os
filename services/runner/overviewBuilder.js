@@ -202,6 +202,27 @@ function scaffoldOverview({ proc, run, sm }) {
   };
 }
 
+// Build the actions slot from PERSISTED action items (first-class rows). Each item
+// is individually actionable: it must be cleared (approved or marked N/A) before
+// the run can be signed off. Falls back to whatever the branch produced when a run
+// predates the action-item model (no rows persisted).
+function actionsSlot(run, fallback) {
+  const items = run.actionItems || [];
+  if (!items.length) return fallback || { sub: 'nothing awaiting you', items: [], open: 0 };
+  const open = items.filter((i) => i.status === 'open').length;
+  const sub = open > 0
+    ? `${open} of ${items.length} still need to be cleared`
+    : `all ${items.length} cleared \u2014 ready to sign off`;
+  return {
+    sub, open, total: items.length,
+    items: items.map((i) => ({
+      id: i.id, severity: i.severity, title: i.title, detail: i.detail,
+      amount: i.amount, amountFormat: 'money0',
+      status: i.status, note: i.note, clearedBy: i.clearedBy,
+    })),
+  };
+}
+
 // Entry point. Returns the standard overview schema for a run, or null. The
 // cached AI insight (if any) rides along on `ov.insight` for every branch.
 function buildOverview({ proc, run, summary }) {
@@ -209,6 +230,7 @@ function buildOverview({ proc, run, summary }) {
   const sm = summary || {};
   const ov = sm.overview                          // engine emitted its own slots
     || (sm.carriers ? freightOverview({ proc, run, sm }) : scaffoldOverview({ proc, run, sm }));
+  ov.actions = actionsSlot(run, ov.actions);
   ov.insight = sm.aiInsight || null;
   return ov;
 }

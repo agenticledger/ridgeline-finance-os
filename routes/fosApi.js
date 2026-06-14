@@ -4,7 +4,7 @@
 
 const express = require('express');
 const prisma = require('../services/db');
-const { signOff, freezeRun, getRun, listRuns, PROCESS_SLUG } = require('../services/accrual/runService');
+const { signOff, freezeRun, clearActionItem, getRun, listRuns, PROCESS_SLUG } = require('../services/accrual/runService');
 const { runProcess } = require('../services/runner/processRunner');
 const { reconcileRun, getReconciliation } = require('../services/accrual/reconcileService');
 const improve = require('../services/accrual/improveService');
@@ -36,6 +36,8 @@ router.get('/process/:slug', async (req, res) => {
 router.get('/runs', async (req, res) => { try { ok(res, await listRuns(req.query.slug || PROCESS_SLUG)); } catch (e) { fail(res, e); } });
 router.get('/run/:id', async (req, res) => { try { ok(res, await getRun(req.params.id)); } catch (e) { fail(res, e); } });
 router.post('/run', async (req, res) => { try { ok(res, await runProcess({ processSlug: req.body.slug || PROCESS_SLUG, period: req.body.period, mode: req.body.mode })); } catch (e) { fail(res, e); } });
+router.get('/run/:id/actions', async (req, res) => { try { ok(res, await prisma.actionItem.findMany({ where: { runId: req.params.id }, orderBy: { ord: 'asc' } })); } catch (e) { fail(res, e); } });
+router.post('/run/:id/action/:itemId/clear', async (req, res) => { try { ok(res, await clearActionItem(req.params.itemId, req.body || {})); } catch (e) { fail(res, e); } });
 router.post('/run/:id/signoff', async (req, res) => { try { ok(res, await signOff(req.params.id, req.body || {})); } catch (e) { fail(res, e); } });
 router.post('/run/:id/freeze', async (req, res) => { try { ok(res, await freezeRun(req.params.id, req.body || {})); } catch (e) { fail(res, e); } });
 

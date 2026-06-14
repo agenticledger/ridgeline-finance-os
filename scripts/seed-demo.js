@@ -17,7 +17,7 @@
 // Run:  node scripts/seed-demo.js
 
 const prisma = require('../services/db');
-const { executeRun, signOff, freezeRun, getRun, PROCESS_SLUG } = require('../services/accrual/runService');
+const { executeRun, signOff, freezeRun, clearActionItem, getRun, PROCESS_SLUG } = require('../services/accrual/runService');
 const { reconcileRun } = require('../services/accrual/reconcileService');
 const improve = require('../services/accrual/improveService');
 
@@ -62,6 +62,12 @@ async function closedMarchLoop() {
   const r = await executeRun({ period: 'March 2026', mode: 'manual', actor: 'Accrual Agent' });
   let full = await getRun(r.runId);
   console.log(`  March 2026  -> ${full.status}  ${money(full.totalAccrual)} (booked estimate)`);
+
+  // Clear every action item first (the sign-off gate): approve them all.
+  for (const item of (full.actionItems || [])) {
+    await clearActionItem(item.id, { status: 'approved', note: 'Reviewed — within tolerance for March.', actor: 'M. Chen (Controller)' });
+  }
+  if ((full.actionItems || []).length) console.log(`              -> cleared ${full.actionItems.length} action items (approved)`);
 
   // Sign off (posts the staged JE) unless it auto-posted.
   if (full.status === 'awaiting_human' || full.status === 'needs_review') {

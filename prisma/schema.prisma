@@ -391,6 +391,7 @@ model AccrualRun {
   events     LedgerEvent[]
   steps      StepExecution[]
   reconciliations Reconciliation[]
+  actionItems ActionItem[]
 
   @@index([period])
   @@index([processId])
@@ -432,6 +433,28 @@ model Exception {
 
   @@index([runId])
   @@map("exceptions")
+}
+
+// CONTROLS — per-item action queue: each must be cleared (approved or N/A) to sign off
+model ActionItem {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId     String    @map("run_id") @db.Uuid
+  kind      String    @db.VarChar(40)
+  severity  String    @default("warning") @db.VarChar(20)
+  title     String    @db.Text
+  detail    String?   @db.Text
+  amount    Float?
+  status    String    @default("open") @db.VarChar(20) // open | approved | na
+  note      String?   @db.Text
+  clearedBy String?   @map("cleared_by") @db.VarChar(80)
+  clearedAt DateTime? @map("cleared_at") @db.Timestamptz()
+  ord       Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  run AccrualRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@map("action_items")
 }
 
 // CONTROLS — append-only event ledger (system of record)

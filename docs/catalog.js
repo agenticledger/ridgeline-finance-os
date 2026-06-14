@@ -59,8 +59,29 @@ const API_GROUPS = [
         returns: '{ runId, status, summary } for the new run.',
       },
       {
+        op: 'fos_list_actions', method: 'GET', path: '/api/fos/run/:id/actions', auth: 'none',
+        summary: 'List a run\u2019s action items (the per-item overseer queue). Each must be cleared (approved or N/A) before the run can be signed off.',
+        params: [{ in: 'path', name: 'id', type: 'string', required: true, desc: 'Run id (uuid).' }],
+        body: [],
+        returns: 'Array of action items with status (open | approved | na), title, detail, amount, note.',
+      },
+      {
+        op: 'fos_clear_action', method: 'POST', path: '/api/fos/run/:id/action/:itemId/clear', auth: 'none',
+        summary: 'Clear a single action item: approve it or mark it N/A (with optional note). Clearing every item unlocks sign-off.',
+        params: [
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Run id (uuid).' },
+          { in: 'path', name: 'itemId', type: 'string', required: true, desc: 'Action item id (uuid).' },
+        ],
+        body: [
+          { name: 'status', type: 'string', required: true, desc: 'Disposition: "approved" or "na".' },
+          { name: 'note', type: 'string', required: false, desc: 'Optional note recorded on the item + audit trail.' },
+          { name: 'actor', type: 'string', required: false, desc: 'Who is clearing. Defaults to "Controller".' },
+        ],
+        returns: '{ item, openCount } — the updated item and how many items remain open.',
+      },
+      {
         op: 'fos_signoff_run', method: 'POST', path: '/api/fos/run/:id/signoff', auth: 'none',
-        summary: 'Sign off an awaiting_human run: posts the journal entry and advances the run.',
+        summary: 'Sign off an awaiting_human run: posts the journal entry and advances the run. Blocked (409) until every action item is cleared.',
         params: [{ in: 'path', name: 'id', type: 'string', required: true, desc: 'Run id (uuid).' }],
         body: [
           { name: 'actor', type: 'string', required: false, desc: 'Who is signing off. Defaults to "Controller".' },

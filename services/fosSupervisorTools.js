@@ -41,8 +41,22 @@ const FOS_TOOLS = [
     inputSchema: { type: 'object', properties: { period: { type: 'string', description: 'e.g. "April 2026". Defaults to April 2026.' } } },
   },
   {
+    name: 'fos__action_items',
+    description: 'List the per-item action queue for a run: each item the overseer must clear (approve or mark N/A) before the run can be signed off. Use this to answer "what is left / what needs clearing" and to get item ids for fos__clear_action. Omit runId for the latest run.',
+    inputSchema: { type: 'object', properties: { runId: { type: 'string', description: 'Run id; omit for latest.' } } },
+  },
+  {
+    name: 'fos__clear_action',
+    description: 'Clear a single action item — approve it or mark it N/A, with an optional note. Every item must be cleared before fos__sign_off will post. Only call when the human in THIS conversation has told you how to dispose of the item. Get item ids from fos__action_items.',
+    inputSchema: { type: 'object', properties: {
+      itemId: { type: 'string', description: 'Action item id to clear.' },
+      status: { type: 'string', enum: ['approved', 'na'], description: 'Disposition: approved or na (not applicable).' },
+      note: { type: 'string', description: 'Optional note recorded on the item + audit ledger.' },
+    }, required: ['itemId', 'status'] },
+  },
+  {
     name: 'fos__sign_off',
-    description: 'IRREVERSIBLE: post the staged journal entry and advance a paused run. Only call this when the human in THIS conversation has explicitly told you to sign off / post. Otherwise explain what it would do and ask them to confirm first. Omit runId for the latest run.',
+    description: 'IRREVERSIBLE: post the staged journal entry and advance a paused run. Only call this when the human in THIS conversation has explicitly told you to sign off / post. Otherwise explain what it would do and ask them to confirm first. Blocked until every action item is cleared (see fos__action_items / fos__clear_action). Omit runId for the latest run.',
     inputSchema: { type: 'object', properties: { runId: { type: 'string' }, note: { type: 'string', description: 'Sign-off note for the audit ledger.' } } },
   },
   {
@@ -217,6 +231,24 @@ registerToolHandler('fos__', async (toolName, input, context) => {
             ? (r.autoPosted ? 'Run complete and auto-posted (all carriers within tolerance).' : `Run complete and PAUSED at the gate (${r.status}). A human must sign off before the JE posts.`)
             : `Run complete (${r.status}). This process runs as a generic scaffold until an engine is set on its steps.`,
         });
+      }
+
+      case 'fos__action_items': {
+        const id = input.runId || (await latestRunId(slug));
+        if (!id) return JSON.stringify({ error: 'No run found.' });
+        const items = await prisma.actionItem.findMany({ where: { runId: id }, orderBy: { ord: 'asc' } });
+        const open = items.filter((i) => i.status === 'open').length;
+        return JSON.stringify({
+          runId: id, open, total: items.length,
+          readyToSignOff: open === 0,
+          items: items.map((i) => ({ id: i.id, severity: i.severity, title: i.title, detail: i.detail, amount: round(i.amount), status: i.status, note: i.note, clearedBy: i.clearedBy })),
+        });
+      }
+
+      case 'fos__clear_action': {
+        if (!input.itemId) return JSON.stringify({ error: 'itemId is required.' });
+        const r = await runService.clearActionItem(input.itemId, { status: input.status, note: input.note || '', actor: 'Owner Agent (on human instruction)' });
+        return JSON.stringify({ ok: true, itemId: input.itemId, status: r.item.status, openRemaining: r.openCount, message: r.openCount === 0 ? 'All action items cleared — the run can now be signed off.' : `Item cleared. ${r.openCount} still open.` });
       }
 
       case 'fos__sign_off': {
