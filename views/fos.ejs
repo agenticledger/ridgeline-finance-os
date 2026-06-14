@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=26">
+  <link rel="stylesheet" href="/css/fos.css?v=27">
 </head>
 <body>
 <%
@@ -96,7 +96,7 @@
   <% } else if(active==='history'){ %>
     <%- include('fos/history', {proc,historyRuns,run,fmt0,signed}) %>
   <% } else if(active==='edit'){ %>
-    <%- include('fos/edit', {proc,runs,versions,packageVersions,proposals,fmt0}) %>
+    <%- include('fos/edit', {proc,runs,versions,packageVersions,proposals,config:editConfig,fmt0}) %>
   <% } else if(!run && runnable){ %>
     <div class="card pad" style="text-align:center;padding:50px">
       <div class="eyebrow">No runs yet</div>

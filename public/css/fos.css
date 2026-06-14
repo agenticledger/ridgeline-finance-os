@@ -784,6 +784,23 @@ details.fnsec[open] .fnsec-chev{transform:rotate(90deg)}
 .edit-focus-field textarea:focus{outline:none;border-color:var(--line-strong)}
 .edit-eval{margin:14px 16px 0;justify-content:center}
 .edit-eval:disabled{opacity:.5;cursor:not-allowed}
+/* Option A — unified surface: collapsible run-grounding + baseline/proposed header */
+.edit-ground{border-bottom:1px solid var(--line-2)}
+.edit-ground-tog{display:flex;align-items:center;gap:9px;width:100%;padding:12px 16px;border:none;background:none;cursor:pointer;color:var(--ink);font-size:13px;font-weight:650}
+.edit-ground-tog:hover{background:var(--panel-2)}
+.egt-chev{width:15px;height:15px;color:var(--muted);transition:transform .15s ease;flex:none}
+.edit-ground-tog.open .egt-chev{transform:rotate(90deg)}
+.egt-opt{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--panel-2);border:1px solid var(--line-2);border-radius:999px;padding:1px 8px}
+.egt-count{margin-left:auto;font-size:12px;font-weight:600;color:var(--accent-ink)}
+.edit-ground-body{padding:4px 0 14px;border-top:1px solid var(--line-2)}
+.edit-ground-body .edit-pick-h,.edit-ground-body .edit-runs,.edit-ground-body .edit-focus-field{padding-left:16px;padding-right:16px}
+.edit-ground-body .edit-pick-h{padding-top:12px}
+.edit-ground-body .edit-focus-field{border-bottom:none}
+.pv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line-2)}
+.pv-title{font-size:13px;font-weight:700;color:var(--ink)}
+.pv-title.proposed{color:var(--accent-ink)}
+.pv-revert{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;padding:4px 11px;border-radius:var(--r-sm)}
+.pv-revert:hover{border-color:var(--line-strong);color:var(--ink)}
 
 /* ── Agents admin ───────────────────────────────────────── */
 .ag-gate{display:flex;justify-content:center;padding:70px 24px;max-width:var(--appw);margin:0 auto}

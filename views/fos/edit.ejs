@@ -1,79 +1,102 @@
 <!-- Edit — improve the process package via the same owner agent that built it.
-     Select runs to evaluate (+ optional focus), the agent proposes a blueprint of
-     changes to steps/policies/engines/tools, you review and apply. Apply cuts a new
-     versioned Package snapshot. Below: the audit trail (Package history + applied
-     proposals + policy versions). -->
+     One surface: the right pane shows the CURRENT package as the baseline; you chat
+     on the left to change it. Run-grounding is optional — leave it empty for a pure
+     intent-driven edit, or select runs (+ focus) to have the agent learn from how the
+     process actually ran. Apply cuts a new versioned Package snapshot (applyEdit).
+     Below: the audit trail (Package history + applied proposals + policy versions). -->
 <%
   const runList = runs || [];
   const props = proposals || [];
   const pkgVers = packageVersions || [];
   const vers = versions || [];
+  const cfg = config || null;
   const slug = proc.slug;
+  const curVersion = (pkgVers[0] && pkgVers[0].version) || null;
   const statusChip = {pending:'review', applied:'auto_post', dismissed:'escalate'};
+  // Map the live package config into the blueprint shape the preview renderer uses.
+  let currentPkg = null;
+  if (cfg) {
+    const stepPolicies = [];
+    (cfg.steps || []).forEach((s) => (s.policies || []).forEach((p) => stepPolicies.push(p)));
+    const allPolicies = (cfg.policies || []).concat(stepPolicies);
+    currentPkg = {
+      definition: { name: cfg.name, description: cfg.description, frequency: cfg.frequency, mode: cfg.mode, functionSlug: cfg.function ? cfg.function.slug : null },
+      steps: (cfg.steps || []).map((s) => ({ name: s.name, description: s.description, decisionType: s.decisionType, isGate: s.isGate, pauseAfter: s.pauseAfter })),
+      policies: allPolicies.map((p) => ({ name: p.name, definition: p.definition, params: p.params })),
+      tools: (cfg.tools || []).map((t) => ({ slug: t.slug, role: t.role })),
+      improve: cfg.improveTrigger || null,
+    };
+  }
 %>
 
 <section class="card edit-intro">
   <div class="card-h">
     <h3>Edit the package</h3>
-    <span class="sub">same owner agent &middot; suggests updates to steps, policies, engines &amp; tools</span>
+    <span class="sub">same owner agent &middot; chat to change steps, policies, engines &amp; tools</span>
   </div>
   <div class="card-b">
-    <p class="hint" style="margin:0">Pick the runs you want the agent to learn from, add an optional focus, and it will propose concrete improvements to this process. Review the blueprint on the right, then apply &mdash; every applied edit cuts a new versioned <b>Package</b>.</p>
+    <p class="hint" style="margin:0">The current package is on the right. Just tell me what to change &mdash; that's the edit. Want me to learn from how it actually ran? Open <b>Ground in past runs</b> and pick the runs to evaluate. Every applied change cuts a new versioned <b>Package</b>.</p>
   </div>
 </section>
 
 <div class="autowrap edit-wrap">
-  <!-- LEFT: run selection + focus + chat -->
+  <!-- LEFT: optional run grounding + chat -->
   <section class="autochat">
-    <div class="edit-pick">
-      <div class="edit-pick-h">
-        <span class="auto-lab">Runs to evaluate</span>
-        <% if (runList.length) { %><button type="button" class="edit-all" id="selAll">Select all</button><% } %>
+    <div class="edit-ground" id="ground">
+      <button type="button" class="edit-ground-tog" id="groundTog" aria-expanded="false">
+        <svg class="egt-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        <span>Ground in past runs</span>
+        <span class="egt-opt">optional</span>
+        <span class="egt-count" id="groundCount"></span>
+      </button>
+      <div class="edit-ground-body" id="groundBody" hidden>
+        <% if (!runList.length) { %>
+          <p class="hint" style="margin:0">No runs yet. Execute a run first to ground edits in real outcomes.</p>
+        <% } else { %>
+          <div class="edit-pick-h">
+            <span class="auto-lab">Runs to evaluate</span>
+            <button type="button" class="edit-all" id="selAll">Select all</button>
+          </div>
+          <div class="edit-runs" id="runs">
+            <% runList.forEach(function(r){ %>
+              <label class="edit-run">
+                <input type="checkbox" name="runId" value="<%= r.id %>">
+                <span class="er-per"><%= r.period %></span>
+                <span class="chip <%= r.status==='posted'||r.status==='reconciled'?'auto_post':(r.status==='awaiting_human'||r.status==='needs_review'?'escalate':'review') %>"><%= r.status.replace(/_/g,' ') %></span>
+                <span class="er-tot"><%= fmt0(r.totalAccrual) %></span>
+              </label>
+            <% }) %>
+          </div>
+          <label class="edit-focus-field">
+            <span class="auto-lab">Focus (optional)</span>
+            <textarea id="focus" rows="2" placeholder="e.g. the coastal carrier keeps under-accruing, or tighten the materiality gate"></textarea>
+          </label>
+          <button type="button" class="btn primary edit-eval" id="evalBtn">Evaluate selected runs &amp; suggest improvements</button>
+        <% } %>
       </div>
-      <% if (!runList.length) { %>
-        <p class="hint" style="margin:6px 0 0">No runs yet. Execute a run first, then come back to evaluate it.</p>
-      <% } else { %>
-        <div class="edit-runs" id="runs">
-          <% runList.forEach(function(r){ %>
-            <label class="edit-run">
-              <input type="checkbox" name="runId" value="<%= r.id %>">
-              <span class="er-per"><%= r.period %></span>
-              <span class="chip <%= r.status==='posted'||r.status==='reconciled'?'auto_post':(r.status==='awaiting_human'||r.status==='needs_review'?'escalate':'review') %>"><%= r.status.replace(/_/g,' ') %></span>
-              <span class="er-tot"><%= fmt0(r.totalAccrual) %></span>
-            </label>
-          <% }) %>
-        </div>
-      <% } %>
     </div>
-
-    <label class="edit-focus-field">
-      <span class="auto-lab">Focus (optional)</span>
-      <textarea id="focus" rows="2" placeholder="e.g. the coastal carrier keeps under-accruing, or tighten the materiality gate"></textarea>
-    </label>
-
-    <button type="button" class="btn primary edit-eval" id="evalBtn" <%= runList.length?'':'disabled' %>>Evaluate selected runs &amp; suggest improvements</button>
 
     <div class="auto-thread" id="thread">
       <div class="auto-msg bot">
         <div class="auto-bubble">
-          I own and engineer this process. Select the runs you want me to study, add a focus if you have one, and I'll suggest concrete improvements to its steps, policies, engines, or tools. You can keep refining with me before you apply anything.
+          I own and engineer this process. The current package is shown on the right. Tell me what to change &mdash; tighten a threshold, add a step, swap an engine &mdash; and I'll draft it. If you'd rather I learn from real runs, open "Ground in past runs" above and pick which ones to study.
         </div>
       </div>
     </div>
 
     <form class="auto-composer" id="composer">
-      <textarea id="input" rows="2" placeholder="Refine the suggestion, ask why, or steer the changes..."></textarea>
+      <textarea id="input" rows="2" placeholder="Describe the change you want, or ask me what I'd improve..."></textarea>
       <button class="btn primary" type="submit" id="sendBtn">Send</button>
     </form>
   </section>
 
-  <!-- RIGHT: proposed blueprint -->
+  <!-- RIGHT: current package (baseline) -> proposed changes -->
   <aside class="autopreview" id="preview">
-    <div class="auto-empty" id="previewEmpty">
-      <div class="ae-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
-      <p>The proposed changes will appear here once I've studied the runs. Review them, refine in the chat, then apply to cut a new Package version.</p>
+    <div class="pv-head">
+      <span class="pv-title" id="pvTitle">Current package<%= curVersion ? ' &middot; v'+curVersion : '' %></span>
+      <button type="button" class="pv-revert" id="pvRevert" hidden>Back to current</button>
     </div>
-    <div id="previewBody" hidden></div>
+    <div id="previewBody"></div>
     <div class="auto-applybar" id="applyBar" hidden>
       <button class="btn primary" id="applyBtn" type="button">Apply &amp; version package</button>
       <span class="auto-applynote" id="applyNote"></span>
@@ -152,6 +175,8 @@
 <script>
 (function(){
   var SLUG = <%- JSON.stringify(slug) %>;
+  var CURRENT = <%- JSON.stringify(currentPkg) %>;
+  var CUR_TITLE = <%- JSON.stringify('Current package' + (curVersion ? ' \u00b7 v' + curVersion : '')) %>;
   var thread=document.getElementById('thread');
   var composer=document.getElementById('composer');
   var input=document.getElementById('input');
@@ -160,8 +185,12 @@
   var focusEl=document.getElementById('focus');
   var runsBox=document.getElementById('runs');
   var selAll=document.getElementById('selAll');
-  var previewEmpty=document.getElementById('previewEmpty');
+  var groundTog=document.getElementById('groundTog');
+  var groundBody=document.getElementById('groundBody');
+  var groundCount=document.getElementById('groundCount');
   var previewBody=document.getElementById('previewBody');
+  var pvTitle=document.getElementById('pvTitle');
+  var pvRevert=document.getElementById('pvRevert');
   var applyBar=document.getElementById('applyBar');
   var applyBtn=document.getElementById('applyBtn');
   var applyNote=document.getElementById('applyNote');
@@ -171,27 +200,10 @@
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   function selectedRunIds(){return runsBox?[].slice.call(runsBox.querySelectorAll('input[name=runId]:checked')).map(function(i){return i.value;}):[];}
-
-  if(selAll){selAll.addEventListener('click',function(){
-    var boxes=runsBox.querySelectorAll('input[name=runId]');
-    var allOn=[].every.call(boxes,function(b){return b.checked;});
-    [].forEach.call(boxes,function(b){b.checked=!allOn;});
-    selAll.textContent=allOn?'Select all':'Clear all';
-  });}
-
-  function addMsg(role,text){
-    var wrap=document.createElement('div');
-    wrap.className='auto-msg '+(role==='user'?'me':'bot');
-    var b=document.createElement('div'); b.className='auto-bubble'; b.textContent=text;
-    wrap.appendChild(b); thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
-    return wrap;
-  }
-
   function badge(t){return '<span class="bp-badge '+t+'">'+t.replace('_',' ')+'</span>';}
 
-  function renderPreview(bp){
-    if(!bp){previewEmpty.hidden=false;previewBody.hidden=true;applyBar.hidden=true;return;}
-    previewEmpty.hidden=true;previewBody.hidden=false;applyBar.hidden=false;
+  function bpHtml(bp){
+    if(!bp)return '<div class="auto-empty" style="padding:40px"><p>No package to show.</p></div>';
     var h='';
     if(bp.definition){
       var d=bp.definition;
@@ -225,42 +237,83 @@
       h+='</div></div>';
     }
     if(bp.improve){h+='<div class="bp-sec"><h3>Improve</h3><div class="bp-def"><div class="bp-meta">'+esc(bp.improve.mode)+' &middot; last '+esc(String(bp.improve.lookbackRuns))+' runs</div></div></div>';}
-    previewBody.innerHTML=h;
+    return h;
+  }
+
+  function showCurrent(){
+    previewBody.innerHTML=bpHtml(CURRENT);
+    pvTitle.textContent=CUR_TITLE;
+    pvTitle.classList.remove('proposed');
+    pvRevert.hidden=true; applyBar.hidden=true;
+  }
+  function showProposed(bp){
+    previewBody.innerHTML=bpHtml(bp);
+    pvTitle.textContent='Proposed changes';
+    pvTitle.classList.add('proposed');
+    pvRevert.hidden=false; applyBar.hidden=false;
     applyNote.textContent='Applies to this process and cuts a new Package version.';
+  }
+  pvRevert.addEventListener('click',showCurrent);
+
+  // Ground panel toggle
+  groundTog.addEventListener('click',function(){
+    var open=groundBody.hidden;
+    groundBody.hidden=!open;
+    groundTog.setAttribute('aria-expanded',String(open));
+    groundTog.classList.toggle('open',open);
+  });
+  function refreshCount(){
+    var n=selectedRunIds().length;
+    groundCount.textContent=n?(n+' selected'):'';
+  }
+  if(runsBox){runsBox.addEventListener('change',refreshCount);}
+  if(selAll){selAll.addEventListener('click',function(){
+    var boxes=runsBox.querySelectorAll('input[name=runId]');
+    var allOn=[].every.call(boxes,function(b){return b.checked;});
+    [].forEach.call(boxes,function(b){b.checked=!allOn;});
+    selAll.textContent=allOn?'Select all':'Clear all';
+    refreshCount();
+  });}
+
+  function addMsg(role,text){
+    var wrap=document.createElement('div');
+    wrap.className='auto-msg '+(role==='user'?'me':'bot');
+    var b=document.createElement('div'); b.className='auto-bubble'; b.textContent=text;
+    wrap.appendChild(b); thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
+    return wrap;
   }
 
   function send(payload, userLabel, busyEl, busyText, restoreText){
-    addMsg('user',userLabel);
-    var bot=addMsg('bot','Studying...');
-    busyEl.disabled=true; var prev=busyEl.textContent; busyEl.textContent=busyText;
+    var bot=addMsg('bot','Working...');
+    busyEl.disabled=true; busyEl.textContent=busyText;
     fetch('/api/automator/propose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){return r.json();})
       .then(function(j){
-        busyEl.disabled=false; busyEl.textContent=restoreText||prev;
+        busyEl.disabled=false; busyEl.textContent=restoreText;
         if(!j.ok){bot.querySelector('.auto-bubble').textContent='Error: '+(j.error||'request failed');return;}
         var d=j.data;
         bot.querySelector('.auto-bubble').textContent=d.message||'(no message)';
         messages.push({role:'assistant',content:d.message||''});
-        if(d.ready&&d.blueprint){blueprint=d.blueprint;renderPreview(blueprint);}
+        if(d.ready&&d.blueprint){blueprint=d.blueprint;showProposed(blueprint);}
       })
-      .catch(function(err){busyEl.disabled=false;busyEl.textContent=restoreText||prev;bot.querySelector('.auto-bubble').textContent='Network error: '+err.message;});
+      .catch(function(err){busyEl.disabled=false;busyEl.textContent=restoreText;bot.querySelector('.auto-bubble').textContent='Network error: '+err.message;});
   }
 
   evalBtn && evalBtn.addEventListener('click',function(){
     var ids=selectedRunIds();
-    if(!ids.length){addMsg('bot','Pick at least one run to evaluate first.');return;}
+    if(!ids.length){addMsg('bot','Pick at least one run to evaluate, or just tell me what to change in the chat.');return;}
     var focus=(focusEl.value||'').trim();
     var label='Evaluate '+ids.length+' run'+(ids.length>1?'s':'')+(focus?(' — focus: '+focus):'')+'.';
-    messages.push({role:'user',content:label});
-    send({messages:messages,slug:SLUG,runIds:ids,focus:focus}, label, evalBtn, 'Studying runs...', 'Re-evaluate selected runs');
+    addMsg('user',label); messages.push({role:'user',content:label});
+    send({messages:messages,slug:SLUG,runIds:ids,focus:focus}, label, evalBtn, 'Studying runs...', 'Evaluate selected runs & suggest improvements');
   });
 
   composer.addEventListener('submit',function(e){
     e.preventDefault();
     var text=input.value.trim(); if(!text)return;
     input.value='';
-    messages.push({role:'user',content:text});
-    send({messages:messages,slug:SLUG,runIds:selectedRunIds(),focus:(focusEl.value||'').trim()}, text, sendBtn, 'Thinking...', 'Send');
+    addMsg('user',text); messages.push({role:'user',content:text});
+    send({messages:messages,slug:SLUG,runIds:selectedRunIds(),focus:(focusEl?(focusEl.value||'').trim():'')}, text, sendBtn, 'Thinking...', 'Send');
   });
 
   applyBtn.addEventListener('click',function(){
@@ -269,10 +322,13 @@
     fetch('/api/automator/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blueprint:blueprint,slug:SLUG})})
       .then(function(r){return r.json();})
       .then(function(j){
-        if(!j.ok){applyBtn.disabled=false;applyBtn.textContent='Apply &amp; version package';applyNote.textContent='Error: '+(j.error||'apply failed');return;}
+        if(!j.ok){applyBtn.disabled=false;applyBtn.textContent='Apply & version package';applyNote.textContent='Error: '+(j.error||'apply failed');return;}
         window.location.href='/process/'+SLUG+'/edit';
       })
       .catch(function(err){applyBtn.disabled=false;applyBtn.textContent='Apply & version package';applyNote.textContent='Network error: '+err.message;});
   });
+
+  // Boot: baseline package on the right.
+  showCurrent();
 })();
 </script>

@@ -102,6 +102,8 @@ async function buildView(req, res, slug, active) {
   const proposals = active === 'edit' ? await improve.listProposals(slug, {}) : [];
   const versions = active === 'edit' ? await improve.listVersions(slug) : [];
   const packageVersions = active === 'edit' ? await improve.listPackageVersions(slug) : [];
+  // The live package, shown as the baseline on the Edit surface's right pane.
+  const editConfig = active === 'edit' ? await cfg.getProcessConfig(slug).catch(() => null) : null;
   // Run history: every run for this process with its headline numbers.
   const historyRuns = active === 'history' ? await listRunHistory(slug) : [];
 
@@ -154,6 +156,7 @@ async function buildView(req, res, slug, active) {
     proposals,
     versions,
     packageVersions,
+    editConfig,
     historyRuns,
     ownerAgent,
     subfunctions: SUBFUNCTIONS,
