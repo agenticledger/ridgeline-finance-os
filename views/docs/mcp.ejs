@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=15">
+  <link rel="stylesheet" href="/css/fos.css?v=24">
 </head>
 <body>
 <%- include('../partials/topbar') %>
@@ -29,7 +29,7 @@
     <section id="overview" class="doc-intro">
       <div class="eyebrow">Agent tool surface</div>
       <h1>MCP Documentation</h1>
-      <p class="lede"><%= count %> Model Context Protocol tools exposing the freight accrual loop to any MCP-capable agent (Claude Desktop, Claude Code, an external close orchestrator). The server runs over stdio and calls the validated engine and the persisted run model directly. For the broader REST surface, see the <a href="/docs/api">API docs</a>.</p>
+      <p class="lede"><%= count %> Model Context Protocol tools &mdash; process-agnostic verbs that drive ANY process by slug (run it, sign off / freeze / reconcile a run, run the improvement loop, construct &amp; supervise a process) for any MCP-capable agent (Claude Desktop, Claude Code, an external close orchestrator). There are no process-specific tools; runs default to the freight accrual process so the demo works without a slug. The server runs over stdio and calls the persisted run model directly. For the broader REST surface, see the <a href="/docs/api">API docs</a>.</p>
     </section>
 
     <section id="connect" class="docgroup">
@@ -49,7 +49,7 @@
     }
   }
 }</code></pre>
-        <p class="ep-returns">Every tool returns a JSON text payload. Read-only tools (estimate, price, list, get, reconcile, get_policies) are safe to call freely; write tools (run_accrual, sign_off, freeze_run, set_policy) change the system of record.</p>
+        <p class="ep-returns">Every tool returns a JSON text payload. Read-only tools (run_list, run_get, process_list, process_get_config, process_get_policies, improve_list_versions) are safe to call freely; write tools (run_execute, run_sign_off, run_freeze, run_reconcile, process_set_policy, improve_apply) change the system of record.</p>
       </div>
     </section>
 

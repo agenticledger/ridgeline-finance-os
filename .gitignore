@@ -1,7 +1,16 @@
 node_modules/
 .env
-.env.local
+.env.*
+!.env.example
 .DS_Store
 *.log
 npm-debug.log*
 FileStorage/Temp/
+
+# Agent/editor instruction files — never publish
+CLAUDE.md
+**/CLAUDE.md
+.claude/
+GEMINI.md
+AGENTS.md
+.cursorrules

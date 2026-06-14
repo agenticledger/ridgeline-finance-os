@@ -54,56 +54,56 @@ function buildStepExecutions(result, policyByKey, stepByKey) {
       input: { source: 'shipments_apr2026.csv', rowsRead: result.ingestion.shipments + (dq.duplicate || 0) },
       processing: { rule: 'dedup by shipment_id; infer missing weight from median lbs/unit per carrier' },
       policiesApplied: [],
-      outcome: { shipments: result.ingestion.shipments, duplicatesRemoved: dq.duplicate || 0, weightsInferred: dq.weight_estimated || 0, dataQualityNotes: result.ingestion.dataQuality.length },
+      outcome: { shipments: result.ingestion.shipments, duplicatesRemoved: dq.duplicate || 0, weightsInferred: dq.weight_estimated || 0, dataQualityNotes: result.ingestion.dataQuality.length, headline: `${result.ingestion.shipments} shipments` },
     },
     {
       key: 'normalize', decisionType: 'policy_based',
       input: { shipments: result.ingestion.shipments },
       processing: { rule: 'normalize carrier names + service levels; resolve territory/lane; flag out-of-territory' },
       policiesApplied: [],
-      outcome: { carriersResolved: 3, outOfTerritoryFlags: oot },
+      outcome: { carriersResolved: 3, outOfTerritoryFlags: oot, headline: `3 carriers${oot ? ` · ${oot} OOT` : ''}` },
     },
     {
       key: 'price', decisionType: 'policy_based',
       input: { shipments: result.ingestion.shipments, rateCards: 3 },
       processing: { rule: 'deterministic per-carrier pricing: base + fuel + accessorials + floors' },
       policiesApplied: [],
-      outcome: { byCarrier: carrierOutcome((x) => x.contractual), contractualTotal: portfolio.contractual },
+      outcome: { byCarrier: carrierOutcome((x) => x.contractual), contractualTotal: portfolio.contractual, headline: money(portfolio.contractual) },
     },
     {
       key: 'calibrate', decisionType: 'judgment_based',
       input: { invoiceHistory: result.ingestion.invoicesAnalyzed },
       processing: { method: param(policyByKey, 'calibration_method', 'central', 'median'), level: param(policyByKey, 'calibration_method', 'level', 'month') },
       policiesApplied: ['calibration_method'],
-      outcome: { factors: { peak: result.calibration.peak.factor, heartland: result.calibration.heartland.factor, coastal: result.calibration.coastal.factor } },
+      outcome: { factors: { peak: result.calibration.peak.factor, heartland: result.calibration.heartland.factor, coastal: result.calibration.coastal.factor }, headline: `×${result.calibration.peak.factor} / ×${result.calibration.heartland.factor} / ×${result.calibration.coastal.factor}` },
     },
     {
       key: 'baseline', decisionType: 'policy_based',
       input: { months: param(policyByKey, 'baseline_window', 'months', 3) },
       processing: { rule: `trailing ${param(policyByKey, 'baseline_window', 'months', 3)}-month average of actuals (Denise method)` },
       policiesApplied: ['baseline_window'],
-      outcome: { byCarrier: carrierOutcome((x) => x.baseline), benchmarkTotal: round2(c.reduce((s, x) => s + (x.baseline || 0), 0)) },
+      outcome: (() => { const benchmarkTotal = round2(c.reduce((s, x) => s + (x.baseline || 0), 0)); return { byCarrier: carrierOutcome((x) => x.baseline), benchmarkTotal, headline: money(benchmarkTotal) }; })(),
     },
     {
       key: 'estimate', decisionType: 'judgment_based',
       input: { contractual: portfolio.contractual, baselineBlend: true },
       processing: { ensemble: param(policyByKey, 'estimation_method', 'ensemble', 'inverse_variance'), mixShiftZ: param(policyByKey, 'estimation_method', 'mixShiftZ', 1.0), bandZ: param(policyByKey, 'estimation_method', 'bandZ', 1.645) },
       policiesApplied: ['estimation_method'],
-      outcome: { byCarrier: carrierOutcome((x) => x.point), point: portfolio.point, low: portfolio.low, high: portfolio.high },
+      outcome: { byCarrier: carrierOutcome((x) => x.point), point: portfolio.point, low: portfolio.low, high: portfolio.high, headline: money(portfolio.point) },
     },
     {
       key: 'exceptions', decisionType: 'policy_based',
       input: { shipments: result.ingestion.shipments },
       processing: { rule: 'severity mapping critical/warning/info' },
       policiesApplied: [],
-      outcome: { total: result.exceptions.length, summary: result.exceptionSummary, critical: result.exceptions.filter((x) => x.severity === 'critical').map((x) => ({ id: x.shipmentId, type: x.type, message: x.message })) },
+      outcome: { total: result.exceptions.length, summary: result.exceptionSummary, critical: result.exceptions.filter((x) => x.severity === 'critical').map((x) => ({ id: x.shipmentId, type: x.type, message: x.message })), headline: `${result.exceptions.length} raised` },
     },
     {
       key: 'gate', decisionType: 'policy_based', isGate: true,
       input: { materialityThreshold: param(policyByKey, 'materiality_gate', 'materialityThreshold', 1500), maxCv: param(policyByKey, 'materiality_gate', 'maxCv', 0.15) },
       processing: { rule: 'auto_post only if half-band < materiality AND CV < maxCv; else review/escalate' },
       policiesApplied: ['materiality_gate'],
-      outcome: { dispositions: result.control.dispositions, gateMatrix: result.control.gateMatrix, overseerQueue: result.control.overseerQueue },
+      outcome: (() => { const d = result.control.dispositions; return { dispositions: d, gateMatrix: result.control.gateMatrix, overseerQueue: result.control.overseerQueue, headline: `${d.auto_post || 0} auto · ${d.review || 0} review · ${d.escalate || 0} escalate` }; })(),
     },
     {
       key: 'post_je', decisionType: 'policy_based',
@@ -117,7 +117,7 @@ function buildStepExecutions(result, policyByKey, stepByKey) {
       input: { lookbackRuns: param(policyByKey, 'improve_trigger', 'lookbackRuns', 6) },
       processing: { rule: 'forward-replay reconciliation; propose param changes' },
       policiesApplied: ['improve_trigger'],
-      outcome: { coverage: result.learning.coverage, monthsReplayed: result.learning.monthsReplayed, proposals: result.learning.proposals },
+      outcome: { coverage: result.learning.coverage, monthsReplayed: result.learning.monthsReplayed, proposals: result.learning.proposals, headline: `${(result.learning.coverage && result.learning.coverage.pct) || 0}% band coverage` },
     },
   ];
 
@@ -200,7 +200,9 @@ async function executeRun({ period = 'April 2026', mode = 'manual', actor = 'Acc
       // post_je waits when paused; everything else done. reconcile_learn is evidence (done).
       let status = 'done';
       if (s.key === 'post_je') status = autoPosted ? 'done' : 'awaiting_human';
-      const outcome = s.key === 'post_je' ? { ...s.outcome, posted: autoPosted } : s.outcome;
+      const outcome = s.key === 'post_je'
+        ? { ...s.outcome, posted: autoPosted, headline: `${autoPosted ? 'posted ' : 'staged '}${money((s.outcome.je && s.outcome.je.total) || 0)}` }
+        : s.outcome;
       return {
         runId: run.id, stepId: s.stepId, order: s.order, key: s.key, name: s.name,
         status, decisionType: s.decisionType,
@@ -262,7 +264,7 @@ async function signOff(runId, { actor = 'Controller', note = '' } = {}) {
   if (postStep) {
     await prisma.stepExecution.update({
       where: { id: postStep.id },
-      data: { status: 'done', finishedAt: new Date(), outcome: { ...postStep.outcome, posted: true, postedBy: actor, postedAt: new Date().toISOString() }, override: note ? { signOffNote: note } : undefined },
+      data: { status: 'done', finishedAt: new Date(), outcome: { ...postStep.outcome, posted: true, postedBy: actor, postedAt: new Date().toISOString(), headline: `posted ${money((postStep.outcome.je && postStep.outcome.je.total) || run.totalAccrual)}` }, override: note ? { signOffNote: note } : undefined },
     });
   }
 
@@ -312,4 +314,36 @@ async function listRuns(processSlug = PROCESS_SLUG) {
   });
 }
 
-module.exports = { executeRun, signOff, freezeRun, getRun, listRuns, loadProcessContext, PROCESS_SLUG };
+// ── Richer run list for the History tab: headline numbers + step/exception counts ──
+async function listRunHistory(processSlug = PROCESS_SLUG) {
+  const process = await prisma.process.findFirst({ where: { slug: processSlug } });
+  if (!process) return [];
+  const runs = await prisma.accrualRun.findMany({
+    where: { processId: process.id },
+    orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { steps: true, exceptions: true, lines: true } } },
+  });
+  return runs.map((r) => {
+    const sm = r.summary || {};
+    return {
+      id: r.id,
+      period: r.period,
+      status: r.status,
+      mode: r.mode,
+      frozen: r.frozen,
+      parentRunId: r.parentRunId,
+      createdAt: r.createdAt,
+      point: sm.scaffold ? null : r.totalAccrual,
+      contractual: sm.contractual ?? null,
+      denise: sm.denise ?? null,
+      vsDenise: sm.vsDenise ?? null,
+      dispositions: sm.dispositions || { auto_post: 0, review: 0, escalate: 0 },
+      autoPosted: !!sm.autoPosted,
+      stepCount: r._count.steps,
+      exceptionCount: r._count.exceptions,
+      lineCount: r._count.lines,
+    };
+  });
+}
+
+module.exports = { executeRun, signOff, freezeRun, getRun, listRuns, listRunHistory, loadProcessContext, PROCESS_SLUG };

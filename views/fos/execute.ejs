@@ -46,6 +46,6 @@
   </div>
   <div class="btn-row">
     <span class="hint">Editing a step or policy spawns a new run (full re-run). Configure steps on the Setup tab.</span>
-    <form method="POST" action="/process/<%= proc.slug %>/run" style="margin-left:auto"><button class="btn">Re-run</button></form>
+    <form method="POST" action="/process/<%= proc.slug %>/run" class="js-run" data-name="<%= proc.name %>" data-verb="Re-run" style="margin-left:auto"><button class="btn">Re-run</button></form>
   </div>
 </section>

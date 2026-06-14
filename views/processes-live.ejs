@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=15">
+  <link rel="stylesheet" href="/css/fos.css?v=24">
   <style>
     /* Live Map — scoped. Inherits fos.css theme tokens (--bg/--ink/--accent/...). */
     body.livemap { overflow: hidden; height: 100vh; }
@@ -36,6 +36,24 @@
     .lm-tag { font-family: var(--mono); font-weight: 600; }
     .lm-node:hover .lm-box { filter: drop-shadow(0 0 10px var(--glow)); }
     .lm-glyph { font-family: var(--sans); font-weight: 800; }
+    .lm-go { font-family: var(--mono); fill: var(--muted); opacity: 0; transition: opacity .15s; }
+    .lm-node.process:hover .lm-go { opacity: 1; fill: var(--accent); }
+
+    /* Swimlanes (overview) */
+    .lm-banner rect { fill: var(--panel-2); stroke: var(--accent); stroke-width: 1.4; }
+    .lm-banner-t { font-family: var(--sans); font-weight: 800; font-size: 20px; fill: var(--ink); }
+    .lm-banner-s { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+    .lm-lanebg { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+    .lm-lanebg.alt { fill: var(--panel-2); }
+    .lm-lane.live .lm-lanebg, .lm-lane.attention .lm-lanebg { stroke: var(--line-strong); }
+    .lm-lane.empty .lm-lanebg { stroke-dasharray: 5 4; opacity: .7; }
+    .lm-lane-t { font-family: var(--sans); font-weight: 700; font-size: 15px; fill: var(--ink); }
+    .lm-lane.empty .lm-lane-t { fill: var(--ink-2); }
+    .lm-lane-s { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+    .lm-lane-tag { font-family: var(--mono); font-weight: 700; font-size: 9.5px; letter-spacing: .08em; }
+    .lm-lanediv { stroke: var(--line); stroke-width: 1; }
+    .lm-empty { font-family: var(--mono); font-size: 12px; fill: var(--muted); font-style: italic; }
+    .lm-lane.lm-dim { opacity: .14; transition: opacity .2s; }
     /* status dot pulse */
     @keyframes lmpulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
     .lm-dot.attention, .lm-dot.live { animation: lmpulse 1.6s ease-in-out infinite; }
@@ -197,7 +215,7 @@
 </div>
 
 <script>window.LM_GRAPH = <%- JSON.stringify(graph) %>;</script>
-<script src="/js/processes-live.js?v=2"></script>
+<script src="/js/processes-live.js?v=4"></script>
 <script src="/js/theme.js"></script>
 </body>
 </html>

@@ -15,8 +15,15 @@ const { decrypt } = require('../encryption');
 const { getProviderByName } = require('../llm');
 const { createProcess, SUBFUNCTIONS } = require('./processService');
 const cfg = require('./configService');
+const builder = require('../builder/processBuilder');
 
 const SCOPES = ['whole', 'definition', 'steps', 'policies', 'tools'];
+
+// Match builder's key derivation so dependsOn/feedbackTo name references resolve
+// to the same keys the builder assigns when it creates the steps.
+function keyFromName(s) {
+  return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+}
 
 async function resolveLlm() {
   const config = await prisma.llmConfig.findFirst({ orderBy: { updatedAt: 'desc' } });
@@ -45,10 +52,16 @@ function buildSystemPrompt({ scope, tools, subfunctions }) {
 
 THE MODEL. A Process has:
   - definition: name, description, frequency (e.g. "monthly"), mode (auto | adhoc | manual), functionSlug (the finance sub-function it belongs to).
-  - steps[]: the ordered checklist the process runs each period. Each step has name, description, decisionType (policy_based = rule-driven, judgment_based = needs estimation/AI, mixed), engineSource (a code/service file if one runs it, else null), isGate (true if it is a materiality/approval gate), pauseAfter (true if the run pauses for a human after this step).
+  - steps[]: the ordered checklist the process runs each period. Each step has name, description, decisionType (policy_based = rule-driven, judgment_based = needs estimation/AI, mixed), engineSource (a code/service file if one runs it, else null), isGate (true if it is a materiality/approval gate), pauseAfter (true if the run pauses for a human after this step), dependsOn (array of the NAMES of earlier steps whose output this step consumes, forming the data-flow DAG), and feedbackTo (the NAME of an earlier step this step proposes changes back to, e.g. a reconcile step feeding a calibration step; null if none).
   - policies[]: the rules and tunable parameters. Each has name, definition (plain English), and params (a flat object of typed key/values like thresholds, account codes, windows).
   - tools[]: bindings to the global tool registry, referenced by slug.
   - improve: { mode: auto | manual, lookbackRuns: integer } controlling the continuous-improvement loop.
+
+HOW A RUN'S OUTPUT IS STRUCTURED (the overview). Every process renders the SAME templatized overview, regardless of type. After the status band (headline, KPI tiles, AI insight, action items) the page is three role-based zones, and an engine that emits its own overview must shape its result into them:
+  - ANALYSIS: the working that justifies the number (the evidence, the breakdowns, the intermediate tables).
+  - RESULT: the single artifact the process exists to hand off (the journal entry, the report, the forecast). One process, one primary deliverable. If no engine is bound to the posting step, RESULT is empty and the template shows an honest empty state.
+  - OTHER DETAILS: optional appendix (provenance, run parameters, drill-in links). Renders nothing when empty.
+Each zone is an ordered array of typed BLOCKS. A block is { kind, title, sub, ...payload } where kind is one of: "table" (columns[]+rows[]), "journal" (a balanced JE: status, date, lines[], total), "notes" (labelled bullets), "keyvalue" (label/value pairs), "links" (buttons). A table can live in ANY zone, the engine decides placement by which array it puts the block in. When you design or describe a process, be clear about what its RESULT artifact is (the one thing it produces) versus what belongs in ANALYSIS (the supporting working).
 
 FINANCE SUB-FUNCTIONS (functionSlug must be one of these):
 ${fnList}
@@ -74,7 +87,7 @@ RESPONSE SHAPE (emit exactly this object):
   "scope": "${scope}",
   "blueprint": {
     "definition": { "name": "...", "description": "...", "frequency": "monthly", "mode": "manual", "functionSlug": "gl-close" } | null,
-    "steps": [ { "name": "...", "description": "...", "decisionType": "policy_based", "engineSource": null, "isGate": false, "pauseAfter": false } ] | null,
+    "steps": [ { "name": "...", "description": "...", "decisionType": "policy_based", "engineSource": null, "isGate": false, "pauseAfter": false, "dependsOn": [], "feedbackTo": null } ] | null,
     "policies": [ { "name": "...", "definition": "...", "params": { "materialityThreshold": 1500 } } ] | null,
     "tools": [ { "slug": "calibration-engine", "role": null } ] | null,
     "improve": { "mode": "auto", "lookbackRuns": 6 } | null
@@ -119,6 +132,8 @@ function sanitizeBlueprint(bp) {
       engineSource: s.engineSource || null,
       isGate: !!s.isGate,
       pauseAfter: !!s.pauseAfter,
+      dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(deEm).filter(Boolean) : [],
+      feedbackTo: s.feedbackTo ? deEm(s.feedbackTo) : null,
     })).filter((s) => s.name);
   }
   if (Array.isArray(bp.policies)) {
@@ -175,67 +190,114 @@ async function propose({ messages = [], scope = 'whole', attachments = [] } = {}
   };
 }
 
-// Phase 2 — apply. Persists the blueprint. With no slug, creates a fresh process
-// and replaces its starter steps/policies with the blueprint. With a slug, the
-// sections present in the blueprint REPLACE the existing ones on that process.
+// Phase 2 — apply. Creation is AGENTIC-ONLY (decision §14.8): the process is born
+// together with its owner agent, and the blueprint is realized through the owner
+// agent's Builder tools so every step/policy/tool is versioned (ObjectVersion,
+// source 'agent') and written to the agent's build_log. On finalize we cut the
+// package's v1 snapshot and seed the agent's context document. (A slug-targeted
+// edit re-applies the sections present in the blueprint to an existing process.)
 async function apply({ blueprint, slug } = {}) {
   const bp = sanitizeBlueprint(blueprint);
   if (!bp) throw Object.assign(new Error('No blueprint to apply.'), { status: 400 });
 
-  let targetSlug = slug;
-  let created = false;
-  if (!targetSlug) {
-    const name = bp.definition?.name;
-    if (!name) throw Object.assign(new Error('Blueprint needs a definition.name to create a process.'), { status: 400 });
-    const proc = await createProcess({
-      name,
-      functionSlug: bp.definition.functionSlug || undefined,
-      frequency: bp.definition.frequency,
-      mode: bp.definition.mode,
-      description: bp.definition.description || '',
-      template: 'blank',
-    });
-    targetSlug = proc.slug;
-    created = true;
-  }
+  if (!slug) return applyCreate(bp);
+  return applyEdit(slug, bp);
+}
 
-  // Definition (skip the fields createProcess already set on a fresh build, but a
-  // patch is harmless and keeps slug-targeted edits working).
-  if (bp.definition) {
-    await cfg.updateDefinition(targetSlug, bp.definition);
-  }
-  if (bp.improve) {
-    await cfg.updateImproveTrigger(targetSlug, bp.improve);
-  }
+// Fresh build — through the builder, finalized as package v1.
+async function applyCreate(bp) {
+  const name = bp.definition?.name;
+  if (!name) throw Object.assign(new Error('Blueprint needs a definition.name to create a process.'), { status: 400 });
+  const proc = await createProcess({
+    name,
+    functionSlug: bp.definition.functionSlug || undefined,
+    frequency: bp.definition.frequency,
+    mode: bp.definition.mode,
+    description: bp.definition.description || '',
+    template: 'blank',
+  });
+  const slug = proc.slug;
+  const actor = 'Owner Agent (Builder, automator)';
 
-  // Steps: replace the full list with the blueprint's.
-  if (bp.steps) {
-    const current = await cfg.getProcessConfig(targetSlug);
-    for (const s of current.steps) await cfg.deleteStep(targetSlug, s.id);
-    for (const s of bp.steps) await cfg.addStep(targetSlug, s);
-  }
+  if (bp.improve) await cfg.updateImproveTrigger(slug, bp.improve);
 
-  // Policies: replace the full list.
-  if (bp.policies) {
-    const current = await cfg.getProcessConfig(targetSlug);
-    for (const p of current.policies) await cfg.deletePolicy(targetSlug, p.id);
-    for (const p of bp.policies) await cfg.addPolicy(targetSlug, p);
-  }
-
-  // Tools: resolve slugs to ids, replace mappings.
-  if (bp.tools) {
-    const registry = await cfg.listTools();
-    const bySlug = new Map(registry.map((t) => [t.slug, t.id]));
-    const current = await cfg.getProcessConfig(targetSlug);
-    for (const pt of current.tools) await cfg.unmapTool(targetSlug, pt.toolId);
-    for (const t of bp.tools) {
-      const toolId = bySlug.get(t.slug);
-      if (toolId) await cfg.mapTool(targetSlug, { toolId, role: t.role });
+  // Realize the blueprint via the builder. Steps first (clearing the blank
+  // starters), so dependsOn/feedbackTo name references resolve to created keys.
+  if (bp.steps && bp.steps.length) {
+    const existing = await cfg.getProcessConfig(slug);
+    for (const s of existing.steps) await cfg.deleteStep(slug, s.id);
+    const nameToKey = new Map(bp.steps.map((s) => [s.name, keyFromName(s.name)]));
+    const created = new Set();
+    for (const s of bp.steps) {
+      const dependsOn = (s.dependsOn || []).map((n) => nameToKey.get(n) || keyFromName(n)).filter((k) => created.has(k));
+      const feedbackTo = s.feedbackTo ? (nameToKey.get(s.feedbackTo) || keyFromName(s.feedbackTo)) : null;
+      await builder.createStep(slug, {
+        name: s.name, description: s.description, decisionType: s.decisionType,
+        dependsOn, feedbackTo: feedbackTo && created.has(feedbackTo) ? feedbackTo : null,
+        isGate: s.isGate, pauseAfter: s.pauseAfter, engineSource: s.engineSource,
+      }, actor);
+      created.add(keyFromName(s.name));
     }
   }
 
-  const config = await cfg.getProcessConfig(targetSlug);
-  return { slug: targetSlug, created, config };
+  if (bp.policies && bp.policies.length) {
+    const existing = await cfg.getProcessConfig(slug);
+    for (const p of existing.policies) await cfg.deletePolicy(slug, p.id);
+    for (const p of bp.policies) {
+      await builder.createPolicy(slug, { name: p.name, definition: p.definition, params: p.params }, actor);
+    }
+  }
+
+  if (bp.tools && bp.tools.length) {
+    for (const t of bp.tools) {
+      await builder.attachTool(slug, { toolSlug: t.slug, role: t.role }, actor).catch(() => {});
+    }
+  }
+
+  // Finalize: birth snapshot (package v1) + seed the agent's package context.
+  await builder.snapshotPackage(slug, { note: 'Initial agentic build', initial: true }, actor);
+  await builder.seedAgentContext(slug);
+
+  const config = await cfg.getProcessConfig(slug);
+  return { slug, created: true, config };
+}
+
+// Slug-targeted edit — re-apply the present sections to an existing process.
+async function applyEdit(slug, bp) {
+  if (bp.definition) await cfg.updateDefinition(slug, bp.definition);
+  if (bp.improve) await cfg.updateImproveTrigger(slug, bp.improve);
+  if (bp.steps) {
+    const current = await cfg.getProcessConfig(slug);
+    for (const s of current.steps) await cfg.deleteStep(slug, s.id);
+    const nameToKey = new Map(bp.steps.map((s) => [s.name, keyFromName(s.name)]));
+    const created = new Set();
+    for (const s of bp.steps) {
+      const dependsOn = (s.dependsOn || []).map((n) => nameToKey.get(n) || keyFromName(n)).filter((k) => created.has(k));
+      const feedbackTo = s.feedbackTo ? (nameToKey.get(s.feedbackTo) || keyFromName(s.feedbackTo)) : null;
+      await builder.createStep(slug, {
+        name: s.name, description: s.description, decisionType: s.decisionType,
+        dependsOn, feedbackTo: feedbackTo && created.has(feedbackTo) ? feedbackTo : null,
+        isGate: s.isGate, pauseAfter: s.pauseAfter, engineSource: s.engineSource,
+      }, 'Owner Agent (Builder, automator)');
+      created.add(keyFromName(s.name));
+    }
+  }
+  if (bp.policies) {
+    const current = await cfg.getProcessConfig(slug);
+    for (const p of current.policies) await cfg.deletePolicy(slug, p.id);
+    for (const p of bp.policies) await builder.createPolicy(slug, { name: p.name, definition: p.definition, params: p.params }, 'Owner Agent (Builder, automator)');
+  }
+  if (bp.tools) {
+    const registry = await cfg.listTools();
+    const bySlug = new Map(registry.map((t) => [t.slug, t.id]));
+    const current = await cfg.getProcessConfig(slug);
+    for (const pt of current.tools) await cfg.unmapTool(slug, pt.toolId);
+    for (const t of bp.tools) { if (bySlug.has(t.slug)) await builder.attachTool(slug, { toolSlug: t.slug, role: t.role }, 'Owner Agent (Builder, automator)').catch(() => {}); }
+  }
+  await builder.snapshotPackage(slug, { note: 'Agentic edit (automator)' }, 'Owner Agent (Builder, automator)');
+  await builder.seedAgentContext(slug);
+  const config = await cfg.getProcessConfig(slug);
+  return { slug, created: false, config };
 }
 
 module.exports = { propose, apply, SCOPES };

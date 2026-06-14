@@ -69,16 +69,16 @@ async function loadData() {
 
 // The 9-step accrual process + the Improve step, expressed as data (plan §B.1).
 const STEPS = [
-  { order: 1, key: 'ingest', name: 'Ingest', engineSource: 'ingest.js', decisionType: 'policy_based', desc: 'Parse April shipments, dedupe, infer missing weights from unit medians.' },
-  { order: 2, key: 'normalize', name: 'Normalize', engineSource: 'normalize.js', decisionType: 'policy_based', desc: 'Resolve carrier names, territories and lanes; flag out-of-territory.' },
-  { order: 3, key: 'price', name: 'Price', engineSource: 'rateEngine.js + rateConfig.js', decisionType: 'policy_based', desc: 'Deterministically price every lane from the contract rate card (base, fuel, accessorials, floors).' },
-  { order: 4, key: 'calibrate', name: 'Calibrate factor', engineSource: 'calibrate.js', decisionType: 'judgment_based', desc: 'Learn the realization factor from 6 months of invoice history (month-level, median-central, mean-reverting).' },
-  { order: 5, key: 'baseline', name: 'Baseline', engineSource: 'baseline.js', decisionType: 'policy_based', desc: 'Compute the trailing-3-month average (the Denise benchmark) for an honest side-by-side.' },
-  { order: 6, key: 'estimate', name: 'Estimate', engineSource: 'estimate.js', decisionType: 'judgment_based', desc: 'Inverse-variance ensemble of engine vs baseline; mix-shift lift; 90% confidence band.' },
-  { order: 7, key: 'exceptions', name: 'Exceptions', engineSource: 'compute.js', decisionType: 'policy_based', desc: 'Raise and rank exceptions (critical / warning / info) for overseer review.' },
-  { order: 8, key: 'gate', name: 'Materiality gate', engineSource: 'accrualService.js', decisionType: 'policy_based', isGate: true, pauseAfter: true, desc: 'Materiality x confidence gate → auto_post / review / escalate. Pauses the run before posting when a carrier escalates.' },
-  { order: 9, key: 'post_je', name: 'Post journal entry', engineSource: 'accrualService.js', decisionType: 'policy_based', desc: 'Post the balanced JE (6100 Dr / 2150 Cr). Runs only after the gate clears or a human signs off.' },
-  { order: 10, key: 'reconcile_learn', name: 'Reconcile & learn', engineSource: 'learn.js', decisionType: 'judgment_based', desc: 'Improve step: forward-replay reconciliation proposes param changes for calibrate/estimate/gate.' },
+  { order: 1, key: 'ingest', name: 'Ingest', engineSource: 'ingest.js', decisionType: 'policy_based', dependsOn: [], desc: 'Parse April shipments, dedupe, infer missing weights from unit medians.' },
+  { order: 2, key: 'normalize', name: 'Normalize', engineSource: 'normalize.js', decisionType: 'policy_based', dependsOn: ['ingest'], desc: 'Resolve carrier names, territories and lanes; flag out-of-territory.' },
+  { order: 3, key: 'price', name: 'Price', engineSource: 'rateEngine.js + rateConfig.js', decisionType: 'policy_based', dependsOn: ['normalize'], desc: 'Deterministically price every lane from the contract rate card (base, fuel, accessorials, floors).' },
+  { order: 4, key: 'calibrate', name: 'Calibrate factor', engineSource: 'calibrate.js', decisionType: 'judgment_based', dependsOn: ['ingest'], desc: 'Learn the realization factor from 6 months of invoice history (month-level, median-central, mean-reverting).' },
+  { order: 5, key: 'baseline', name: 'Baseline', engineSource: 'baseline.js', decisionType: 'policy_based', dependsOn: ['ingest'], desc: 'Compute the trailing-3-month average (the Denise benchmark) for an honest side-by-side.' },
+  { order: 6, key: 'estimate', name: 'Estimate', engineSource: 'estimate.js', decisionType: 'judgment_based', dependsOn: ['price', 'calibrate', 'baseline'], desc: 'Inverse-variance ensemble of engine vs baseline; mix-shift lift; 90% confidence band.' },
+  { order: 7, key: 'exceptions', name: 'Exceptions', engineSource: 'compute.js', decisionType: 'policy_based', dependsOn: ['price'], desc: 'Raise and rank exceptions (critical / warning / info) for overseer review.' },
+  { order: 8, key: 'gate', name: 'Materiality gate', engineSource: 'accrualService.js', decisionType: 'policy_based', isGate: true, pauseAfter: true, dependsOn: ['estimate', 'exceptions'], desc: 'Materiality x confidence gate → auto_post / review / escalate. Pauses the run before posting when a carrier escalates.' },
+  { order: 9, key: 'post_je', name: 'Post journal entry', engineSource: 'accrualService.js', decisionType: 'policy_based', dependsOn: ['gate'], desc: 'Post the balanced JE (6100 Dr / 2150 Cr). Runs only after the gate clears or a human signs off.' },
+  { order: 10, key: 'reconcile_learn', name: 'Reconcile & learn', engineSource: 'learn.js', decisionType: 'judgment_based', dependsOn: ['post_je'], feedbackTo: 'calibrate', desc: 'Improve step: forward-replay reconciliation proposes param changes for calibrate/estimate/gate.' },
 ];
 
 // Reusable tools, mapped to the process. "Automation" tools are the deterministic
@@ -215,8 +215,8 @@ async function seedProcess() {
     const primarySlug = toolSlugs[0];
     const step = await prisma.step.upsert({
       where: { processId_key: { processId: process.id, key: s.key } },
-      update: { order: s.order, name: s.name, description: s.desc, decisionType: s.decisionType, engineSource: s.engineSource, isGate: !!s.isGate, pauseAfter: !!s.pauseAfter, toolId: primarySlug ? toolBySlug[primarySlug].id : null },
-      create: { processId: process.id, order: s.order, key: s.key, name: s.name, description: s.desc, decisionType: s.decisionType, engineSource: s.engineSource, isGate: !!s.isGate, pauseAfter: !!s.pauseAfter, toolId: primarySlug ? toolBySlug[primarySlug].id : null },
+      update: { order: s.order, name: s.name, description: s.desc, decisionType: s.decisionType, engineSource: s.engineSource, isGate: !!s.isGate, pauseAfter: !!s.pauseAfter, dependsOn: s.dependsOn || [], feedbackTo: s.feedbackTo || null, toolId: primarySlug ? toolBySlug[primarySlug].id : null },
+      create: { processId: process.id, order: s.order, key: s.key, name: s.name, description: s.desc, decisionType: s.decisionType, engineSource: s.engineSource, isGate: !!s.isGate, pauseAfter: !!s.pauseAfter, dependsOn: s.dependsOn || [], feedbackTo: s.feedbackTo || null, toolId: primarySlug ? toolBySlug[primarySlug].id : null },
     });
     stepByKey[s.key] = step;
     // Attach every mapped tool to the step (idempotent).

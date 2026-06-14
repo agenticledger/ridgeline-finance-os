@@ -92,24 +92,28 @@ npm run mcp        # stdio transport
 
 Register it with an MCP client using `mcp/claude_desktop_config.example.json` (update `cwd` and `DATABASE_URL`).
 
-**Tools:**
+**Tools** — process-agnostic verbs that operate on ANY process by slug (runs default to the freight accrual process so the demo works without one). There are no process-specific tools.
 
 | Tool | What it does | Side effects |
 |------|--------------|--------------|
-| `freight_estimate` | Point estimate, 90% band, per-carrier, vs Denise | none (reads data files) |
-| `freight_price_shipment` | Price one shipment against the right rate card | none |
-| `freight_run_accrual` | Run and persist the stepped accrual | creates a run |
-| `freight_list_runs` | List persisted runs | none |
-| `freight_get_run` | Full run detail, the audit trail | none |
-| `freight_sign_off` | Post the staged JE (human approval) | posts JE |
-| `freight_freeze_run` | Lock a run for period close | freezes |
-| `freight_reconcile` | Backtest accuracy vs Denise, proposals | none |
-| `freight_get_policies` | The versioned policy params (Improve target) | none |
-| `freight_set_policy` | Apply a tuning proposal as a new policy version | bumps version |
+| `run_execute` | Run and persist the stepped process | creates a run |
+| `run_list` | List persisted runs | none |
+| `run_get` | Full run detail, the audit trail | none |
+| `run_sign_off` | Post the staged JE (human approval) | posts JE |
+| `run_freeze` | Lock a run for period close | freezes |
+| `run_reconcile` | Reconcile a posted run against actuals | writes variance rows |
+| `improve_propose` | Generate param-targeted improvement proposals | writes proposals |
+| `improve_apply` | Apply a proposal as a new policy version | bumps version |
+| `improve_list_versions` | Policy version-audit history | none |
+| `process_create` | Create a process (blank or clone) | creates a process |
+| `process_get_config` / `process_get_policies` | Read a process spec / its versioned policy params | none |
+| `process_set_policy` | Tune a policy param by key (writes audit row) | bumps version |
+| `process_add_step` / `process_update_step` / `process_delete_step` | Edit the step checklist | mutates config |
+| `process_add_policy` / `process_update_policy` / `process_delete_policy` | Edit policies | mutates config |
+| `process_map_tool` / `process_attach_step_tool` (+ unbind/detach) | Bind tools to a process/step | mutates config |
+| `process_supervise` / `process_get_owner_agent` / `process_provision_owner_agent` | Supervision tick + owner agent | tick may run/nudge |
 
-The deterministic tools (`freight_estimate`, `freight_price_shipment`) need no database. The stateful tools need `DATABASE_URL`.
-
-A REST mirror of the same surface lives at `/api/fos/*`.
+30 tools in total across Runs, Improve, Process configuration, and Supervision. See `/docs/mcp` for the full reference. A REST mirror of the same surface lives at `/api/fos/*` (`/docs/api`).
 
 ---
 
@@ -140,7 +144,7 @@ Each data issue is logged as an Exception with a severity and surfaces in the ov
 ## What I would improve next
 
 - Per-shipment accessorial prediction from invoice history instead of the per-carrier accessorial rate, to tighten the band further.
-- Wire the Improve loop's `freight_set_policy` proposals to an in-UI approve action so tuning is one click.
+- Wire the Improve loop's `process_set_policy` proposals to an in-UI approve action so tuning is one click.
 - Add a second process (for example a rebate or commission accrual) to prove the model generalizes beyond freight.
 - Replace the seeded historical backtest with a rolling monthly close cadence on real invoice arrivals.
 

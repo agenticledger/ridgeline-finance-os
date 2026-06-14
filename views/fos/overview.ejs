@@ -1,0 +1,213 @@
+<!-- Overview/Monitor — the standard, templatized overview. Every process fills the
+     SAME named slots; the data comes from services/runner/overviewBuilder.js (either
+     the engine's own `summary.overview`, the freight mapper, or the scaffold mapper).
+     This template is a dumb renderer of the `ov` slot schema + the universal run-action
+     buttons (sign-off / freeze / re-run) which are driven by run.status. -->
+<%
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function fmtVal(v, f){
+    if(f==='money0') return fmt0(v);
+    if(f==='money2') return fmt2(v);
+    if(f==='signed') return signed(v);
+    if(f==='pct') return pct(v);
+    return (v==null?'\u2014':esc(v));
+  }
+  function bandTd(c){
+    var b=band(c);
+    var h='<td class="bandcell"><div class="bandtrack">';
+    h+='<div class="bandfill" style="left:'+b.lo+'%;width:'+Math.max(2,b.hi-b.lo)+'%"></div>';
+    h+='<div class="bandpt" style="left:'+b.pt+'%"></div>';
+    if(b.den!=null) h+='<div class="bandden" style="left:'+b.den+'%"></div>';
+    h+='</div><div class="bandcap"><span>'+fmt0(c.low)+'</span><span>'+fmt0(c.high)+'</span></div></td>';
+    return h;
+  }
+  function cellTd(col,row){
+    var v=row[col.key];
+    switch(col.type){
+      case 'entity': return '<td class="carrier">'+esc(row[col.key])+(row._sub?'<small>'+esc(row._sub)+'</small>':'')+'</td>';
+      case 'money0': return '<td class="num">'+fmt0(v)+'</td>';
+      case 'money0strong': return '<td class="num" style="font-weight:700">'+fmt0(v)+'</td>';
+      case 'money2': return '<td class="num">'+fmt2(v)+'</td>';
+      case 'signed': return '<td class="num" style="font-weight:600">'+signed(v)+'</td>';
+      case 'num': return '<td class="num">'+esc(v)+'</td>';
+      case 'num3': return '<td class="num">'+(v==null?'\u2014':Number(v).toFixed(3))+'</td>';
+      case 'pct': return '<td class="num">'+pct(v)+'</td>';
+      case 'chip': return '<td><span class="chip '+esc(v&&v.cls)+'">'+esc(v&&v.label)+'</span></td>';
+      case 'code': return '<td><code>'+esc(v)+'</code></td>';
+      case 'strong': return '<td><b>'+esc(v)+'</b></td>';
+      case 'band': return bandTd(row);
+      default: return '<td>'+esc(v)+'</td>';
+    }
+  }
+  // ── Typed-block renderers (a block can sit in any zone — analysis/result/details) ──
+  function tableBlock(b){
+    var h='<section class="card"><div class="card-h"><h3>'+esc(b.title)+'</h3>'+(b.sub?'<span class="sub">'+esc(b.sub)+'</span>':'')+'</div><table class="grid"><thead><tr>';
+    (b.columns||[]).forEach(function(c){ var num=(c.type==='money0'||c.type==='money0strong'||c.type==='money2'||c.type==='signed'||c.type==='num'||c.type==='num3'||c.type==='pct'); h+='<th class="'+(num?'num':'')+'">'+esc(c.label)+'</th>'; });
+    h+='</tr></thead><tbody>';
+    (b.rows||[]).forEach(function(row){ h+='<tr>'; (b.columns||[]).forEach(function(col){ h+=cellTd(col,row); }); h+='</tr>'; });
+    return h+'</tbody></table></section>';
+  }
+  function journalBlock(b){
+    var h='<section class="card"><div class="card-h"><h3>'+esc(b.title||'Journal entry')+'</h3><span class="sub">'+esc(b.status||'')+(b.date?(' \u00b7 '+esc(b.date)):'')+'</span></div><div class="card-b je">';
+    (b.lines||[]).forEach(function(l){ h+='<div class="jrow"><div><span class="acct">'+esc(l.account)+'</span>'+(l.subledger?'<div class="sub">'+esc(l.subledger)+'</div>':'')+'</div><div class="dr">'+(l.debit?fmt2(l.debit):'')+'</div><div class="cr">'+(l.credit?fmt2(l.credit):'')+'</div></div>'; });
+    return h+'<div class="jrow tot"><div>Balanced</div><div class="dr">'+fmt2(b.total)+'</div><div class="cr">'+fmt2(b.total)+'</div></div></div></section>';
+  }
+  function notesBlock(b){
+    var h='<section class="card"><div class="card-h"><h3>'+esc(b.title)+'</h3>'+(b.sub?'<span class="sub">'+esc(b.sub)+'</span>':'')+'</div><div class="card-b"><ul class="list-clean">';
+    (b.items||[]).forEach(function(n){ h+='<li><span class="ic" style="background:'+esc(n.color||'#6b46c9')+'"></span><div><b>'+esc(n.label)+'</b> &mdash; '+esc(n.body)+'</div></li>'; });
+    return h+'</ul></div></section>';
+  }
+  function kvBlock(b){
+    var h='<section class="card"><div class="card-h"><h3>'+esc(b.title)+'</h3>'+(b.sub?'<span class="sub">'+esc(b.sub)+'</span>':'')+'</div><div class="card-b"><section class="kpis" style="margin:0">';
+    (b.items||[]).forEach(function(it){ h+='<div class="kpi"><div class="lab">'+esc(it.label)+'</div><div class="val">'+fmtVal(it.value,it.format)+'</div>'+(it.note?'<div class="note">'+esc(it.note)+'</div>':'')+'</div>'; });
+    return h+'</section></div></section>';
+  }
+  function linksBlock(b){
+    var h='<div class="btn-row">';
+    (b.items||[]).forEach(function(l){ h+='<a class="btn '+(l.ghost?'ghost':'')+'" href="'+esc(l.href)+'">'+esc(l.label)+'</a>'; });
+    return h+'</div>';
+  }
+  function renderBlock(b){
+    if(!b) return '';
+    switch(b.kind){
+      case 'table': return tableBlock(b);
+      case 'journal': return journalBlock(b);
+      case 'notes': return notesBlock(b);
+      case 'keyvalue': return kvBlock(b);
+      case 'links': return linksBlock(b);
+      default: return '';
+    }
+  }
+%>
+
+<!-- Hero -->
+<section class="card hero">
+  <div class="lead">
+    <span class="state <%= ov.hero.state %>"><%= ov.hero.label %></span>
+    <h1><%= ov.hero.title %></h1>
+    <% if(ov.hero.context){ %><p class="ctx"><%= ov.hero.context %></p><% } %>
+    <div class="meta">
+      <% ov.hero.meta.forEach(function(m){ %><span><b><%= m.label %></b> <%= m.value %></span><% }) %>
+      <span><b>Run</b> <%= runTime %></span>
+      <% if(frozen){ %><span class="chip frozen">Frozen for close</span><% } %>
+    </div>
+  </div>
+  <div class="figure">
+    <div class="lab"><%= ov.hero.figure.label %></div>
+    <div class="big"><%- fmtVal(ov.hero.figure.value, ov.hero.figure.format) %></div>
+    <% if(ov.hero.figure.sub){ %><div class="band"><%= ov.hero.figure.sub %></div><% } %>
+    <% if(ov.hero.figure.delta){ %><div class="delta <%= ov.hero.figure.delta.tone %>"><%= ov.hero.figure.delta.text %></div><% } %>
+  </div>
+</section>
+
+<!-- KPI tiles -->
+<% if(ov.tiles && ov.tiles.length){ %>
+<section class="kpis">
+  <% ov.tiles.forEach(function(t){ %>
+    <div class="kpi"><div class="lab"><%= t.label %></div><div class="val"><%- fmtVal(t.value, t.format) %></div><% if(t.note){ %><div class="note"><%= t.note %></div><% } %></div>
+  <% }) %>
+</section>
+<% } %>
+
+<!-- AI insight — owner agent narration over the assembled overview (read-only) -->
+<section class="card" id="aiInsight" data-slug="<%= proc.slug %>" data-run="<%= run.id %>">
+  <div class="card-h">
+    <h3>AI insight</h3>
+    <span class="sub" id="aiMeta"><%
+      if(ov.insight){ %>generated <%= ov.insight.generatedAt ? new Date(ov.insight.generatedAt).toLocaleString() : '' %><%= ov.insight.model ? (' \u00b7 '+ov.insight.model) : '' %><% }
+      else { %>not generated yet<% } %></span>
+  </div>
+  <div class="card-b">
+    <div id="aiBody">
+      <% if(ov.insight && ov.insight.text){ %>
+        <ul class="list-clean">
+          <% ov.insight.text.split('\n').map(function(l){return l.trim();}).filter(Boolean).forEach(function(line){
+               var t = line.replace(/^[-*\u2022]\s*/,''); %>
+            <li><span class="ic" style="background:#6b46c9"></span><div><%- esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>') %></div></li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p style="color:var(--ink-3);margin:0">No insight generated yet. The owner agent will read this run &mdash; the headline, tiles, escalations, the band &mdash; and surface what matters.</p>
+      <% } %>
+    </div>
+    <div class="btn-row" style="margin-top:12px">
+      <button type="button" class="btn" id="aiGenBtn"><%= ov.insight ? 'Refresh insight' : 'Generate insight' %></button>
+      <span class="hint" style="color:var(--ink-3)">Calls <%= proc.name %>&rsquo;s owner agent with the saved insight prompt<% if(ov.insight && ov.insight.promptSlug){ %> (<code><%= ov.insight.promptSlug %></code>)<% } %>.</span>
+    </div>
+  </div>
+</section>
+<script>
+(function(){
+  var box=document.getElementById('aiInsight'); if(!box) return;
+  var btn=document.getElementById('aiGenBtn'), bodyEl=document.getElementById('aiBody'), meta=document.getElementById('aiMeta');
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function render(text){
+    var lines=(text||'').split('\n').map(function(l){return l.trim();}).filter(Boolean);
+    var html='<ul class="list-clean">';
+    lines.forEach(function(l){ var t=esc(l.replace(/^[-*\u2022]\s*/,'')).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); html+='<li><span class="ic" style="background:#6b46c9"></span><div>'+t+'</div></li>'; });
+    html+='</ul>'; bodyEl.innerHTML=html;
+  }
+  btn.addEventListener('click', function(){
+    if(btn.disabled) return; var old=btn.textContent; btn.disabled=true; btn.textContent='Thinking\u2026';
+    fetch('/process/'+box.getAttribute('data-slug')+'/insight', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({run:box.getAttribute('data-run')})})
+      .then(function(r){return r.json();})
+      .then(function(j){
+        if(!j.ok) throw new Error(j.error||'failed');
+        render(j.data.text);
+        meta.textContent='generated '+(j.data.generatedAt?new Date(j.data.generatedAt).toLocaleString():'')+(j.data.model?(' \u00b7 '+j.data.model):'');
+        btn.textContent='Refresh insight';
+      })
+      .catch(function(e){ meta.textContent='error: '+(e.message||'failed'); btn.textContent=old; })
+      .finally(function(){ btn.disabled=false; });
+  });
+})();
+</script>
+
+<!-- Action items + universal sign-off / freeze / re-run -->
+<section class="card actions">
+  <div class="card-h"><h3>Action items</h3><span class="sub"><%= ov.actions.sub %></span></div>
+  <% if(ov.actions.items && ov.actions.items.length){ ov.actions.items.forEach(function(q){ %>
+    <div class="item">
+      <span class="sev <%= q.severity %>"></span>
+      <div class="body"><div class="t"><%= q.title %></div><div class="d"><%= q.detail %></div></div>
+      <div class="amt"><%= q.amount!=null?fmtVal(q.amount,q.amountFormat):'' %></div>
+    </div>
+  <% }) } else { %>
+    <div class="item"><span class="sev info"></span><div class="body"><div class="t">Nothing needs you.</div><div class="d">Every step cleared its gate and the run advanced on its own.</div></div></div>
+  <% } %>
+  <div class="btn-row">
+    <% if(st==='awaiting_human'||st==='needs_review'){ %>
+      <form method="POST" action="/run/<%= run.id %>/signoff" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="slug" value="<%= proc.slug %>">
+        <input type="hidden" name="actor" value="M. Chen (Controller)">
+        <input type="text" name="note" placeholder="Sign-off note (optional)" style="font-family:var(--sans);font-size:13px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;min-width:240px">
+        <button class="btn primary" type="submit">Sign off &amp; post JE &rarr;</button>
+      </form>
+      <span class="hint">Signing posts the staged journal entry and advances the run.</span>
+    <% } else if(st==='posted' && !frozen){ %>
+      <form method="POST" action="/run/<%= run.id %>/freeze"><input type="hidden" name="slug" value="<%= proc.slug %>"><button class="btn">Freeze for period close</button></form>
+      <span class="hint">Posted<%= (summary&&summary.postedBy)?(' by '+summary.postedBy):'' %>. Freeze to lock immutable.</span>
+    <% } else if(frozen){ %>
+      <span class="chip frozen">Run frozen &mdash; immutable system of record</span>
+    <% } %>
+    <form method="POST" action="/process/<%= proc.slug %>/run" class="js-run" data-name="<%= proc.name %>" data-verb="Re-run" style="margin-left:auto"><button class="btn ghost">Re-run</button></form>
+  </div>
+</section>
+
+<!-- ANALYSIS — the working that justifies the number -->
+<% if(ov.analysis && ov.analysis.length){ %>
+<div class="zone-h"><h2>Analysis</h2><span class="zsub">how this run got to the number</span></div>
+<% ov.analysis.forEach(function(b){ %><%- renderBlock(b) %><% }) %>
+<% } %>
+
+<!-- RESULT — the artifact this run hands off (always shown; honest empty state) -->
+<div class="zone-h"><h2>Result</h2><span class="zsub">what this run produced</span></div>
+<% if(ov.result && ov.result.length){ ov.result.forEach(function(b){ %><%- renderBlock(b) %><% }) } else { %>
+<section class="card"><div class="card-b"><p style="color:var(--muted);margin:0">No output artifact for this run yet &mdash; no engine is bound to this process&rsquo;s posting step.</p></div></section>
+<% } %>
+
+<!-- OTHER DETAILS — optional appendix / provenance -->
+<% if(ov.details && ov.details.length){ %>
+<div class="zone-h"><h2>Other details</h2><span class="zsub">supporting references &amp; provenance</span></div>
+<% ov.details.forEach(function(b){ %><%- renderBlock(b) %><% }) %>
+<% } %>

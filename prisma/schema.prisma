@@ -29,6 +29,8 @@ enum AgentDocType {
   memory
   context
   daily
+  build_log
+  run_summary
 }
 
 enum CapabilityType {
@@ -553,6 +555,7 @@ model Process {
   frequency      String   @default("monthly") @db.VarChar(40)
   mode           RunMode  @default(manual)
   improveTrigger Json     @default("{}") @map("improve_trigger")
+  version        Int      @default(1)
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
@@ -584,6 +587,8 @@ model Step {
   toolId      String?      @map("tool_id") @db.Uuid
   isGate      Boolean      @default(false) @map("is_gate")
   pauseAfter  Boolean      @default(false) @map("pause_after")
+  dependsOn   String[]     @default([]) @map("depends_on")
+  feedbackTo  String?      @map("feedback_to") @db.VarChar(60)
   version     Int          @default(1)
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz()
 

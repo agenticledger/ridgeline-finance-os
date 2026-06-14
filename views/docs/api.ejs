@@ -10,17 +10,33 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=15">
+  <link rel="stylesheet" href="/css/fos.css?v=24">
 </head>
 <body>
 <%- include('../partials/topbar') %>
 
+<%
+  // Curated into two audiences: the process/agent surface an autonomous agent
+  // drives, and the platform/admin CRUD a human operator uses behind the scenes.
+  var slugify = function(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'-'); };
+  var sections = [
+    { key: 'agent', label: 'Agent surface',
+      desc: 'Process-agnostic verbs an autonomous agent drives: read the process spine, run it, sign off / freeze / reconcile a run, run the improvement loop, and construct or supervise any process. No process-specific endpoints.',
+      groups: groups.filter(function(g){ return g.audience !== 'admin'; }) },
+    { key: 'admin', label: 'Platform & admin',
+      desc: 'Operator CRUD behind the platform: agents, chat, the agent knowledge base & memory, capabilities, LLM config, and settings. Admin-authed.',
+      groups: groups.filter(function(g){ return g.audience === 'admin'; }) },
+  ];
+%>
 <div class="docwrap">
   <aside class="docside">
     <div class="ds-eyebrow">REST API</div>
     <a class="ds-link on" href="#overview">Overview</a>
-    <% groups.forEach(function(g){ %>
-      <a class="ds-link" href="#g-<%= g.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') %>"><%= g.name %><span class="ds-n"><%= g.endpoints.length %></span></a>
+    <% sections.forEach(function(sec){ %>
+      <div class="ds-eyebrow"><%= sec.label %></div>
+      <% sec.groups.forEach(function(g){ %>
+        <a class="ds-link" href="#g-<%= slugify(g.name) %>"><%= g.name %><span class="ds-n"><%= g.endpoints.length %></span></a>
+      <% }) %>
     <% }) %>
   </aside>
 
@@ -28,7 +44,7 @@
     <section id="overview" class="doc-intro">
       <div class="eyebrow">Agent-ready surface</div>
       <h1>API Documentation</h1>
-      <p class="lede"><%= count %> REST endpoints across <%= groups.length %> groups. JSON in, JSON out: success is <code>{ ok: true, data }</code>, failure is <code>{ ok: false, error }</code>. The freight accrual domain is also exposed as a curated MCP toolset for agents &mdash; see the <a href="/docs/mcp">MCP docs</a>.</p>
+      <p class="lede"><%= count %> REST endpoints across <%= groups.length %> groups. JSON in, JSON out: success is <code>{ ok: true, data }</code>, failure is <code>{ ok: false, error }</code>. The process surface is also exposed as a curated, process-agnostic MCP toolset for agents &mdash; see the <a href="/docs/mcp">MCP docs</a>.</p>
       <div class="doc-auth">
         <h3>Authentication</h3>
         <p>Public endpoints need no auth. Admin endpoints require a session token: POST your password to <code>/api/admin/login</code>, then send the returned token as the <code>X-Admin-Key</code> header on every admin call.</p>
@@ -40,7 +56,12 @@
       </div>
     </section>
 
-    <% groups.forEach(function(g){ var gid='g-'+g.name.toLowerCase().replace(/[^a-z0-9]+/g,'-'); %>
+    <% sections.forEach(function(sec){ %>
+    <section id="sec-<%= sec.key %>" class="doc-intro">
+      <div class="eyebrow"><%= sec.label %></div>
+      <p class="lede"><%= sec.desc %></p>
+    </section>
+    <% sec.groups.forEach(function(g){ var gid='g-'+slugify(g.name); %>
       <section id="<%= gid %>" class="docgroup">
         <div class="dg-head">
           <h2><%= g.name %> <span class="dg-base"><%= g.base %></span></h2>
@@ -86,6 +107,7 @@
           </details>
         <% }) %>
       </section>
+    <% }) %>
     <% }) %>
   </main>
 </div>

@@ -1,0 +1,322 @@
+<!-- Flow — the run as a dependency graph. Shows the TRUE topology: three parallel
+     branches (shipments / invoices / history) that fan into the estimate, the
+     materiality gate that pauses before posting, and the recursive improve loop.
+     The run itself executes instantly; "Revisualize" replays it slowed-down so a
+     human can watch each stage fire wave by wave. Nothing is faked — playback
+     walks the real dependency waves and reveals each step's real persisted output. -->
+<%
+  // DATA-DRIVEN FLOW (SPEC §9.1). No hardcoded freight keys: nodes come from the
+  // process step definitions joined to the run's StepExecutions; edges come from
+  // each step's dependsOn (solid) + feedbackTo (feedback loop); layout is computed
+  // client-side by longest-path depth. Per-node stat = the engine's outcome.headline.
+  const stepByKey = {};
+  (run.steps || []).forEach(function(s){ stepByKey[s.key] = s; });
+
+  const decLabel = { policy_based:'Policy', judgment_based:'Judgment', mixed:'Mixed' };
+
+  // Build the node list from the process definition, ordered by step.order, joined
+  // to the run's execution state. Only steps that actually executed render a node.
+  const NODES = (proc.steps || [])
+    .slice()
+    .sort(function(a,b){ return a.order - b.order; })
+    .map(function(def){
+      const ex = stepByKey[def.key] || null;
+      const o = (ex && ex.outcome) || {};
+      let statusClass = 'pending';
+      if (ex && ex.status === 'awaiting_human') statusClass = 'paused';
+      else if (ex && ex.status === 'done') statusClass = 'complete';
+      return {
+        key: def.key,
+        name: def.name,
+        order: def.order,
+        decisionType: (ex && ex.decisionType) || def.decisionType || 'policy_based',
+        isGate: !!def.isGate,
+        engineSource: def.engineSource || def.key,
+        dependsOn: def.dependsOn || [],
+        feedbackTo: def.feedbackTo || null,
+        statusClass: statusClass,
+        stat: (o.headline != null ? String(o.headline) : ''),
+      };
+    })
+    .filter(function(n){ return !!stepByKey[n.key]; });
+
+  // Edges: forward data deps + an optional feedback edge. Only between rendered nodes.
+  const renderedKeys = {};
+  NODES.forEach(function(n){ renderedKeys[n.key] = true; });
+  const EDGES = [];
+  NODES.forEach(function(n){
+    (n.dependsOn || []).forEach(function(dep){
+      if (renderedKeys[dep]) EDGES.push({ f: dep, t: n.key });
+    });
+    if (n.feedbackTo && renderedKeys[n.feedbackTo]) {
+      EDGES.push({ f: n.key, t: n.feedbackTo, kind: 'feedback', label: 'proposes changes' });
+    }
+  });
+
+  var doneCount = (run.steps||[]).filter(function(s){return s.status==='done';}).length;
+%>
+
+<section class="card flowcard">
+  <div class="card-h">
+    <div>
+      <h3>Run flow &mdash; <%= run.period %></h3>
+      <span class="sub"><%= doneCount %>/<%= (run.steps||[]).length %> steps · dependency graph · <%= run.status.replace(/_/g,' ') %></span>
+    </div>
+    <div class="flow-ctrl">
+      <label class="flow-speed">Speed
+        <select id="flowSpeed">
+          <option value="1.6">0.6×</option>
+          <option value="1" selected>1×</option>
+          <option value="0.55">2×</option>
+        </select>
+      </label>
+      <button class="btn primary" id="revizBtn" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Revisualize
+      </button>
+    </div>
+  </div>
+
+  <% if (!NODES.length) { %>
+    <div class="flowgraph" id="flowgraph">
+      <div class="flow-empty">No steps have executed for this run yet.</div>
+    </div>
+  <% } else { %>
+  <div class="flowgraph" id="flowgraph">
+    <div class="flowinner" id="flowinner">
+      <svg class="flowedges" id="flowedges" preserveAspectRatio="none"></svg>
+      <div class="flowgrid" id="flowgrid">
+        <% NODES.forEach(function(n){
+             var dec = n.decisionType || 'policy_based';
+        %>
+          <div class="fnode <%= dec %> <%= n.isGate?'isgate':'' %> <%= n.statusClass %>"
+               id="fn-<%= n.key %>" data-key="<%= n.key %>"
+               data-stat="<%= n.stat %>"
+               data-status="<%= n.statusClass %>">
+            <div class="fn-head">
+              <span class="fn-ord"><%= n.order %></span>
+              <span class="chip <%= dec %>"><%= decLabel[dec]||dec %></span>
+              <% if(n.isGate){ %><span class="fn-gatetag">GATE</span><% } %>
+            </div>
+            <div class="fn-name"><%= n.name %></div>
+            <div class="fn-src"><%= n.engineSource %></div>
+            <div class="fn-stat" data-key="<%= n.key %>"><%= n.stat %></div>
+            <span class="fn-spin"></span>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <div class="flow-legend">
+    <span><i class="lg-branch"></i>3 parallel branches — shipments, invoices, history</span>
+    <span><i class="lg-gate"></i>materiality gate pauses before the JE post</span>
+    <span><i class="lg-loop"></i>improve loop feeds learned changes back</span>
+    <span class="flow-legend-note">Runs instantly in production. Revisualize replays the real waves slowed down.</span>
+  </div>
+</section>
+
+<script>
+(function(){
+  var NODES = <%- JSON.stringify(NODES) %>;
+  var EDGES = <%- JSON.stringify(EDGES) %>;
+  if(!NODES.length) return;
+  var ORDER = NODES.map(function(n){ return n.key; });
+  var FEEDBACK = EDGES.filter(function(e){ return e.kind === 'feedback'; });
+
+  // ── Compute layout client-side: col = longest-path depth over forward edges
+  // (feedback edges ignored so the graph stays acyclic for layering). Within a
+  // column, order by step.order and vertically center the stack around a spine. ──
+  var depBy = {}; // key -> [forward dep keys]
+  NODES.forEach(function(n){ depBy[n.key] = []; });
+  EDGES.forEach(function(e){ if(e.kind!=='feedback' && depBy[e.t]) depBy[e.t].push(e.f); });
+  var colCache = {};
+  function colOf(key, seen){
+    if(colCache[key] != null) return colCache[key];
+    seen = seen || {};
+    if(seen[key]) return 0; // cycle guard (shouldn't happen on forward edges)
+    seen[key] = true;
+    var deps = depBy[key] || [];
+    var c = 0;
+    for(var i=0;i<deps.length;i++){ c = Math.max(c, colOf(deps[i], seen) + 1); }
+    colCache[key] = c;
+    return c;
+  }
+  var orderByKey = {};
+  NODES.forEach(function(n){ orderByKey[n.key] = n.order; });
+  var byCol = {};
+  NODES.forEach(function(n){ var c = colOf(n.key); (byCol[c]=byCol[c]||[]).push(n.key); });
+  var colNums = Object.keys(byCol).map(Number).sort(function(a,b){return a-b;});
+  var maxCol = colNums.length ? colNums[colNums.length-1] : 0;
+  var maxRows = 0;
+  colNums.forEach(function(c){ byCol[c].sort(function(a,b){return orderByKey[a]-orderByKey[b];}); maxRows = Math.max(maxRows, byCol[c].length); });
+  var spine = Math.ceil(maxRows / 2);
+  // Apply grid-column / grid-row + data-col to each node.
+  var grid = document.getElementById('flowgrid');
+  if(grid) grid.style.setProperty('--flow-cols', (maxCol + 1));
+  colNums.forEach(function(c){
+    var keys = byCol[c];
+    var startRow = spine - Math.floor(keys.length / 2);
+    keys.forEach(function(k, i){
+      var el = document.getElementById('fn-'+k);
+      if(!el) return;
+      el.dataset.col = (c + 1);
+      el.style.gridColumn = (c + 1);
+      el.style.gridRow = (startRow + i);
+    });
+  });
+
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var inner = document.getElementById('flowinner');
+  var svg = document.getElementById('flowedges');
+  var graph = document.getElementById('flowgraph');
+  var pathByEdge = {}, labelByEdge = {};
+
+  function node(key){ return document.getElementById('fn-'+key); }
+  function edgeId(e){ return e.f+'__'+e.t; }
+
+  function center(el, side){
+    var r = el.getBoundingClientRect();
+    var ir = inner.getBoundingClientRect();
+    var x, y = r.top - ir.top + r.height/2;
+    if(side==='right') x = r.right - ir.left;
+    else if(side==='left') x = r.left - ir.left;
+    else x = r.left - ir.left + r.width/2;
+    return { x:x, y:y, top:r.top-ir.top, bottom:r.bottom-ir.top, cx:r.left-ir.left+r.width/2 };
+  }
+
+  function buildPaths(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    pathByEdge = {}; labelByEdge = {};
+    var w = inner.scrollWidth, h = inner.scrollHeight;
+    svg.setAttribute('width', w); svg.setAttribute('height', h);
+    svg.setAttribute('viewBox', '0 0 '+w+' '+h);
+
+    EDGES.forEach(function(e){
+      var fa = node(e.f), ta = node(e.t);
+      if(!fa || !ta) return;
+      var d, kind = e.kind || 'solid';
+      if(kind==='feedback'){
+        var s = center(fa,'mid'), t = center(ta,'mid');
+        var loopY = Math.max(s.bottom, t.bottom) + 46;
+        d = 'M '+s.cx+' '+s.bottom+' C '+s.cx+' '+loopY+', '+t.cx+' '+loopY+', '+t.cx+' '+t.bottom;
+      } else {
+        var a = center(fa,'right'), b = center(ta,'left');
+        var dx = Math.max(40, (b.x - a.x) * 0.5);
+        d = 'M '+a.x+' '+a.y+' C '+(a.x+dx)+' '+a.y+', '+(b.x-dx)+' '+b.y+', '+b.x+' '+b.y;
+      }
+      var p = document.createElementNS(SVGNS,'path');
+      p.setAttribute('d', d);
+      p.setAttribute('class', 'fedge '+kind);
+      p.setAttribute('fill','none');
+      svg.appendChild(p);
+      pathByEdge[edgeId(e)] = p;
+
+      if(e.label){
+        var mid = p.getPointAtLength(p.getTotalLength()/2);
+        var tx = document.createElementNS(SVGNS,'text');
+        tx.setAttribute('x', mid.x); tx.setAttribute('y', mid.y - 5);
+        tx.setAttribute('class','felabel '+kind);
+        tx.setAttribute('text-anchor','middle');
+        tx.textContent = e.label;
+        svg.appendChild(tx);
+        labelByEdge[edgeId(e)] = tx;
+      }
+    });
+  }
+
+  // ── playback ──────────────────────────────────────────────
+  var COLS = {};
+  ORDER.forEach(function(k){ var n = node(k); if(n){ var c=+n.dataset.col; (COLS[c]=COLS[c]||[]).push(k); } });
+  var waveKeys = Object.keys(COLS).map(Number).sort(function(a,b){return a-b;});
+  var maxWave = waveKeys[waveKeys.length-1];
+  var timers = [];
+  var playing = false;
+
+  function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+
+  function showFinal(){
+    clearTimers(); playing = false;
+    ORDER.forEach(function(k){
+      var n = node(k); if(!n) return;
+      n.classList.remove('firing','pending');
+      n.classList.add(n.dataset.status);
+      var st = n.querySelector('.fn-stat'); if(st){ st.textContent = n.dataset.stat; st.classList.remove('hide'); }
+    });
+    Object.keys(pathByEdge).forEach(function(id){ pathByEdge[id].classList.add('lit'); pathByEdge[id].classList.remove('flowing'); });
+    Object.keys(labelByEdge).forEach(function(id){ labelByEdge[id].classList.add('on'); });
+    FEEDBACK.forEach(function(e){ var fb = pathByEdge[edgeId(e)]; if(fb) fb.classList.add('lit'); });
+  }
+
+  function reset(){
+    clearTimers();
+    ORDER.forEach(function(k){
+      var n = node(k); if(!n) return;
+      n.classList.remove('complete','paused','firing');
+      n.classList.add('pending');
+      var st = n.querySelector('.fn-stat'); if(st){ st.textContent=''; st.classList.add('hide'); }
+    });
+    Object.keys(pathByEdge).forEach(function(id){ pathByEdge[id].classList.remove('lit','flowing'); });
+    Object.keys(labelByEdge).forEach(function(id){ labelByEdge[id].classList.remove('on'); });
+  }
+
+  function fireWave(w){
+    var keys = COLS[w] || [];
+    // light incoming forward edges to these nodes
+    EDGES.forEach(function(e){
+      if(e.kind==='feedback') return;
+      if(keys.indexOf(e.t) !== -1){ var p = pathByEdge[edgeId(e)]; if(p) p.classList.add('flowing'); var lb=labelByEdge[edgeId(e)]; if(lb) lb.classList.add('on'); }
+    });
+    keys.forEach(function(k){
+      var n = node(k); if(!n) return;
+      n.classList.remove('pending');
+      n.classList.add('firing');
+    });
+  }
+
+  function settleWave(w){
+    var keys = COLS[w] || [];
+    EDGES.forEach(function(e){
+      if(e.kind==='feedback') return;
+      if(keys.indexOf(e.t) !== -1){ var p = pathByEdge[edgeId(e)]; if(p){ p.classList.remove('flowing'); p.classList.add('lit'); } }
+    });
+    keys.forEach(function(k){
+      var n = node(k); if(!n) return;
+      n.classList.remove('firing');
+      n.classList.add(n.dataset.status);
+      var st = n.querySelector('.fn-stat'); if(st){ st.textContent = n.dataset.stat; st.classList.remove('hide'); }
+    });
+  }
+
+  function play(){
+    if(playing) return;
+    var mult = parseFloat(document.getElementById('flowSpeed').value) || 1;
+    var step = 780 * mult, beat = 420 * mult;
+    reset();
+    playing = true;
+    var t = 260 * mult;
+    waveKeys.forEach(function(w){
+      timers.push(setTimeout(function(){ fireWave(w); }, t));
+      timers.push(setTimeout(function(){ settleWave(w); }, t + beat));
+      t += step;
+    });
+    // recursive improve/feedback loops fire last
+    timers.push(setTimeout(function(){
+      FEEDBACK.forEach(function(e){
+        var fb = pathByEdge[edgeId(e)]; if(fb) fb.classList.add('lit');
+        var lb = labelByEdge[edgeId(e)]; if(lb) lb.classList.add('on');
+        var tgt = node(e.t); if(tgt){ tgt.classList.add('loopback'); timers.push(setTimeout(function(){ tgt.classList.remove('loopback'); }, 900)); }
+      });
+      playing = false;
+    }, t + 120));
+  }
+
+  function layout(){ buildPaths(); }
+  // initial: show the true final state of the run
+  requestAnimationFrame(function(){ layout(); showFinal(); });
+  window.addEventListener('resize', function(){ var wasPlaying=playing; layout(); if(!wasPlaying) showFinal(); });
+  document.getElementById('revizBtn').addEventListener('click', play);
+  document.getElementById('flowSpeed').addEventListener('change', function(){ if(!playing) showFinal(); });
+})();
+</script>

@@ -1,0 +1,75 @@
+<!-- History — every run for this process, newest first. The audit trail of runs. -->
+<%
+  const runs = historyRuns || [];
+  const statusLabel = { posted:'Posted', awaiting_human:'Awaiting sign-off', needs_review:'Needs review', reconciled:'Reconciled', draft:'Draft' };
+  const statusClass = { posted:'posted', awaiting_human:'awaiting_human', needs_review:'awaiting_human', reconciled:'done', draft:'pending' };
+  const when = (d) => new Date(d).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const totals = runs.reduce((a,r)=>{ a.point+=(r.point||0); a.esc+=(r.dispositions.escalate||0); return a; }, {point:0,esc:0});
+%>
+
+<section class="card">
+  <div class="card-h">
+    <h3>Run history &mdash; <%= proc.name %></h3>
+    <span class="sub"><%= runs.length %> run<%= runs.length===1?'':'s' %> &middot; newest first</span>
+  </div>
+
+  <% if(!runs.length){ %>
+    <div class="pad" style="text-align:center;padding:46px">
+      <div class="eyebrow">No runs yet</div>
+      <p style="color:var(--ink-2);margin:10px 0 18px">Nothing has run for this process. Trigger the first one.</p>
+      <form method="POST" action="/process/<%= proc.slug %>/run" class="js-run" data-name="<%= proc.name %>" data-verb="Run"><button class="btn primary">Run accrual for April 2026</button></form>
+    </div>
+  <% } else { %>
+    <div class="histwrap">
+      <table class="grid histgrid">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Status</th>
+            <th class="num">Booked accrual</th>
+            <th class="num">vs Denise</th>
+            <th>Gate</th>
+            <th class="num">Steps</th>
+            <th class="num">Exceptions</th>
+            <th>Run at</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% runs.forEach(function(r){ var sel = run && r.id===run.id; %>
+            <tr class="<%= sel?'on':'' %>">
+              <td>
+                <div class="hp-period"><b><%= r.period %></b><% if(r.frozen){ %><span class="chip frozen">frozen</span><% } %></div>
+                <div class="hp-sub"><%= r.mode %><%= r.parentRunId?' · re-run':'' %></div>
+              </td>
+              <td><span class="chip <%= statusClass[r.status]||'pending' %>"><%= statusLabel[r.status]||r.status.replace(/_/g,' ') %></span></td>
+              <td class="num"><b><%= fmt0(r.point) %></b></td>
+              <td class="num">
+                <% if(r.vsDenise==null){ %><span style="color:var(--muted)">--</span>
+                <% } else { %><span class="hp-delta"><%= signed(r.vsDenise) %></span><% } %>
+              </td>
+              <td>
+                <span class="gatemini">
+                  <% if(r.dispositions.auto_post){ %><i class="gd auto_post" title="auto-post"></i><%= r.dispositions.auto_post %><% } %>
+                  <% if(r.dispositions.review){ %><i class="gd review" title="review"></i><%= r.dispositions.review %><% } %>
+                  <% if(r.dispositions.escalate){ %><i class="gd escalate" title="escalate"></i><%= r.dispositions.escalate %><% } %>
+                </span>
+              </td>
+              <td class="num"><%= r.stepCount %></td>
+              <td class="num"><%= r.exceptionCount %></td>
+              <td><span class="hp-when"><%= when(r.createdAt) %></span></td>
+              <td class="hp-actions">
+                <a class="hp-link" href="/process/<%= proc.slug %>/monitor?run=<%= r.id %>">Open</a>
+                <a class="hp-link ghost" href="/process/<%= proc.slug %>/flow?run=<%= r.id %>">Flow</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <div class="btn-row">
+      <span class="hint"><%= runs.length %> runs &middot; <%= totals.esc %> escalation<%= totals.esc===1?'':'s' %> across all runs. Each row links to its full monitor + flow view.</span>
+      <form method="POST" action="/process/<%= proc.slug %>/run" class="js-run" data-name="<%= proc.name %>" data-verb="Run again" style="margin-left:auto"><button class="btn">Run again</button></form>
+    </div>
+  <% } %>
+</section>

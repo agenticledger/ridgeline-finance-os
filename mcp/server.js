@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 // Ridgeline Finance OS — MCP server.
 //
-// Exposes the freight-accrual process as reusable Model Context Protocol tools so
-// any agent (Claude Desktop, the Improve agent, an external close orchestrator) can
-// drive the loop: estimate, run, inspect, sign off, freeze, reconcile, and read/tune
-// the versioned policy params.
+// A process-agnostic Model Context Protocol surface. The tools are generic VERBS
+// that operate on ANY process by slug — there are no process-specific tools. An
+// agent uses the same surface to drive the freight accrual loop, a GL close, or
+// any process you construct: configure it, run it, sign off / freeze / reconcile
+// a run, run the improvement loop, and supervise it.
 //
-// Two layers of tools:
-//   * Deterministic, no-DB:  freight_estimate, freight_price_shipment — run the
-//     validated engine live from the data files. Safe, side-effect free, fast.
-//   * Stateful, DB-backed:   freight_run_accrual, freight_get_run, freight_list_runs,
-//     freight_sign_off, freight_freeze_run, freight_reconcile, freight_get_policies,
-//     freight_set_policy — create and advance persisted runs, the system of record.
+// Tool families:
+//   * run_*      — execute and advance the system-of-record runs (execute, list,
+//                  get, sign_off, freeze, reconcile).
+//   * improve_*  — the self-review loop (propose param-targeted improvements,
+//                  apply one, read the version-audit history).
+//   * process_*  — construct-a-process: definition, steps, policies, tool bindings,
+//                  plus the owner-agent / supervision verbs.
+//
+// Runs default to the freight accrual process (PROCESS_SLUG) so the demo works
+// without a slug, but the surface itself is not freight-specific.
 //
 // Transport: stdio. Start with `node mcp/server.js` or `npm run mcp`.
 
@@ -19,13 +24,10 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { z } = require('zod');
 
-const { runAccrual } = require('../services/accrual/accrualService');
-const { computeAccrual } = require('../services/accrual/compute');
-const { normalizeCarrier } = require('../services/accrual/normalize');
 const {
-  executeRun, signOff, freezeRun, getRun, listRuns, loadProcessContext, PROCESS_SLUG,
+  executeRun, signOff, freezeRun, getRun, listRuns, PROCESS_SLUG,
 } = require('../services/accrual/runService');
-const { reconcileRun, getReconciliation } = require('../services/accrual/reconcileService');
+const { reconcileRun } = require('../services/accrual/reconcileService');
 const improve = require('../services/accrual/improveService');
 const { listProcesses, createProcess } = require('../services/accrual/processService');
 const cfg = require('../services/accrual/configService');
@@ -33,7 +35,6 @@ const supervisor = require('../services/accrual/supervisorService');
 const { provisionOwnerAgent } = require('../services/accrual/processAgentService');
 const prisma = require('../services/db');
 
-const round2 = (n) => Math.round(n * 100) / 100;
 const text = (obj) => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] });
 const fail = (e) => ({ isError: true, content: [{ type: 'text', text: `Error: ${e.message || String(e)}` }] });
 
@@ -42,95 +43,18 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
-// ── 1. Estimate (deterministic, no DB) ────────────────────────────────────────
-server.registerTool(
-  'freight_estimate',
-  {
-    title: 'Estimate freight accrual',
-    description:
-      'Run the deterministic freight-accrual engine live from the data files and return the point estimate, 90% confidence band, per-carrier breakdown, calibration factors, and the side-by-side vs Denise\'s trailing-3-month average. Side-effect free: does NOT persist a run. Use this to preview a number before committing it.',
-    inputSchema: {
-      period: z.string().default('April 2026').describe('Accrual period, e.g. "April 2026".'),
-      materialityThreshold: z.number().default(1500).describe('Dollar materiality used by the gate (policy default 1500).'),
-      maxCv: z.number().default(0.15).describe('Max coefficient of variation before a carrier escalates (policy default 0.15).'),
-    },
-  },
-  async ({ period, materialityThreshold, maxCv }) => {
-    try {
-      const r = runAccrual({ period, materialityThreshold, maxCv });
-      return text({
-        period,
-        point: r.portfolio.point,
-        band90: { low: r.portfolio.low, high: r.portfolio.high },
-        denise: r.portfolio.denise,
-        vsDenise: r.portfolio.vsDenise,
-        contractual: r.portfolio.contractual,
-        carriers: r.carriers.map((c) => ({
-          carrier: c.key, label: c.label, contractual: c.contractual, factor: c.factor,
-          point: c.point, low: c.low, high: c.high, cv: c.cv, decision: c.decision, vsDenise: c.vsDenise,
-        })),
-        calibration: {
-          peak: r.calibration.peak.factor, heartland: r.calibration.heartland.factor, coastal: r.calibration.coastal.factor,
-        },
-        dispositions: r.control.dispositions,
-        exceptions: r.exceptionSummary,
-        je: r.je,
-      });
-    } catch (e) { return fail(e); }
-  },
-);
+// ── Runs ─────────────────────────────────────────────────────────────────────
+// Execute and advance the system-of-record runs for a process.
 
-// ── 2. Price a single shipment (deterministic, no DB) ─────────────────────────
+// ── 1. Execute a run (DB-backed, creates the system-of-record run) ────────────
 server.registerTool(
-  'freight_price_shipment',
+  'run_execute',
   {
-    title: 'Price a single shipment',
+    title: 'Execute and persist a process run',
     description:
-      'Deterministically price one shipment against the correct carrier rate card (Peak per-mile, Heartland zone flat, Coastal per-pound), including fuel, accessorials, floors, and residential surcharge. Returns the full charge breakdown. Useful for spot-checks and "why is this number what it is" audits.',
+      'Execute the full stepped process and persist it as the system-of-record run. For the freight accrual process this ingests, prices, calibrates, baselines, estimates, raises exceptions, applies the materiality gate, stages the JE, and reconciles. The materiality gate sits BEFORE the JE post: if any line escalates the run pauses at awaiting_human with the JE staged (not posted) until a human signs off. Returns the runId and gate disposition.',
     inputSchema: {
-      carrier: z.string().describe('Carrier name (peak / heartland / coastal, or a messy variant).'),
-      destination_zip: z.string().describe('Destination ZIP code (drives zone/region/lane).'),
-      destination_city: z.string().optional().describe('Destination city (Peak mileage lookup).'),
-      weight_lbs: z.number().describe('Billable weight in pounds.'),
-      residential: z.boolean().default(false).describe('Residential delivery flag.'),
-      special_handling: z.string().optional().describe('Accessorials, e.g. "liftgate", "inside", "appointment".'),
-    },
-  },
-  async (s) => {
-    try {
-      const carrier = normalizeCarrier(s.carrier);
-      if (!carrier) return text({ note: `Unrecognized carrier "${s.carrier}". Expected Peak / Heartland / Coastal.` });
-      const ship = {
-        shipmentId: 'AD-HOC', date: '2026-04-15',
-        originCity: 'Denver', originState: 'CO',
-        destCity: s.destination_city || null, destState: null, destZip: s.destination_zip || null,
-        carrierRaw: s.carrier, carrier,
-        serviceLevelRaw: null, serviceLevel: 'Standard',
-        weightLbs: s.weight_lbs, weightEstimated: false, units: null,
-        residential: !!s.residential, specialHandling: s.special_handling || null, period: 'April 2026',
-      };
-      const out = computeAccrual([ship]);
-      const line = (out.lines && out.lines[0]) || null;
-      if (!line) return text({ note: 'Could not price shipment — check destination/weight.', carrier, exceptions: out.exceptions });
-      return text({
-        shipmentId: line.shipmentId, carrier: line.carrier,
-        base: round2(line.baseCharge || 0), fuel: round2(line.fuelSurcharge || 0),
-        accessorials: round2(line.accessorialFees || 0), total: round2(line.total || 0),
-        breakdown: line.breakdown || {}, flags: line.flags || [],
-      });
-    } catch (e) { return fail(e); }
-  },
-);
-
-// ── 3. Run accrual (DB-backed, creates the system-of-record run) ──────────────
-server.registerTool(
-  'freight_run_accrual',
-  {
-    title: 'Run and persist a freight accrual',
-    description:
-      'Execute the full stepped accrual and persist it as the system-of-record run: ingest, price, calibrate, baseline, estimate, exceptions, materiality gate, staged JE, reconcile. The materiality gate sits BEFORE the JE post: if any carrier escalates the run pauses at awaiting_human with the JE staged (not posted) until a human signs off. Returns the runId and gate disposition.',
-    inputSchema: {
-      period: z.string().default('April 2026').describe('Accrual period.'),
+      period: z.string().default('April 2026').describe('Run period, e.g. "April 2026".'),
       mode: z.enum(['manual', 'auto']).default('manual').describe('manual = overseer-triggered, auto = scheduled.'),
       actor: z.string().default('MCP Agent').describe('Who triggered the run (for the event ledger).'),
     },
@@ -140,23 +64,23 @@ server.registerTool(
   },
 );
 
-// ── 4. List runs ──────────────────────────────────────────────────────────────
+// ── 2. List runs ──────────────────────────────────────────────────────────────
 server.registerTool(
-  'freight_list_runs',
+  'run_list',
   {
-    title: 'List accrual runs',
-    description: 'List all persisted freight-accrual runs (newest first) with status, period, total, and frozen flag.',
+    title: 'List runs',
+    description: 'List all persisted runs for a process (newest first) with status, period, total, and frozen flag.',
     inputSchema: { slug: z.string().default(PROCESS_SLUG).describe('Process slug.') },
   },
   async ({ slug }) => { try { return text(await listRuns(slug)); } catch (e) { return fail(e); } },
 );
 
-// ── 5. Get a run (full detail) ────────────────────────────────────────────────
+// ── 3. Get a run (full detail) ────────────────────────────────────────────────
 server.registerTool(
-  'freight_get_run',
+  'run_get',
   {
     title: 'Get a run',
-    description: 'Fetch one persisted run in full: summary, per-carrier outcomes, step executions, exceptions, the event ledger, and the journal entry. This is the audit trail.',
+    description: 'Fetch one persisted run in full: summary, per-line outcomes, step executions, exceptions, the event ledger, and the journal entry. This is the audit trail.',
     inputSchema: { runId: z.string().describe('Run id (uuid). Omit to get the latest.').optional() },
   },
   async ({ runId }) => {
@@ -176,13 +100,13 @@ server.registerTool(
   },
 );
 
-// ── 6. Sign off (post the staged JE) ──────────────────────────────────────────
+// ── 4. Sign off (post the staged JE) ──────────────────────────────────────────
 server.registerTool(
-  'freight_sign_off',
+  'run_sign_off',
   {
     title: 'Sign off and post the JE',
     description:
-      'Human-in-the-loop approval. Advances a run that is awaiting_human or needs_review: posts the staged balanced journal entry (debit Freight Expense, credit Accrued Freight Liability) and records the sign-off on the event ledger. This is the "go on" gate.',
+      'Human-in-the-loop approval. Advances a run that is awaiting_human or needs_review: posts the staged balanced journal entry and records the sign-off on the event ledger. This is the "go on" gate.',
     inputSchema: {
       runId: z.string().describe('Run id to sign off.'),
       actor: z.string().default('Controller').describe('Approver name for the audit trail.'),
@@ -192,9 +116,9 @@ server.registerTool(
   async ({ runId, actor, note }) => { try { return text(await signOff(runId, { actor, note })); } catch (e) { return fail(e); } },
 );
 
-// ── 7. Freeze a run (lock for period close) ───────────────────────────────────
+// ── 5. Freeze a run (lock for period close) ───────────────────────────────────
 server.registerTool(
-  'freight_freeze_run',
+  'run_freeze',
   {
     title: 'Freeze a run for close',
     description: 'Lock a posted run immutable for period close. After freezing, it cannot be modified; a new run must be created to revise.',
@@ -203,94 +127,16 @@ server.registerTool(
   async ({ runId, actor }) => { try { return text(await freezeRun(runId, { actor })); } catch (e) { return fail(e); } },
 );
 
-// ── 8. Reconcile / backtest accuracy (Improve evidence) ───────────────────────
+// ── 6. Reconcile a posted run against actuals (writes Reconciliation) ─────────
 server.registerTool(
-  'freight_reconcile',
-  {
-    title: 'Reconcile and backtest accuracy',
-    description:
-      'Run the forward-replay self-review: backtest this engine vs Denise\'s trailing-average over the historical months, report mean-absolute-error by carrier, 90% band coverage, and the improvement proposals. This is the evidence that the engine beats the baseline.',
-    inputSchema: { period: z.string().default('April 2026') },
-  },
-  async ({ period }) => {
-    try {
-      const r = runAccrual({ period });
-      return text({
-        coverage: r.learning.coverage,
-        monthsReplayed: r.learning.monthsReplayed,
-        maeByCarrier: r.learning.maeByCarrier,
-        proposals: r.learning.proposals,
-      });
-    } catch (e) { return fail(e); }
-  },
-);
-
-// ── 9. Read policies (the Improve target) ─────────────────────────────────────
-server.registerTool(
-  'freight_get_policies',
-  {
-    title: 'Get versioned policies',
-    description: 'Return the versioned policy objects that parameterize the process (materiality gate, baseline window, estimation method, calibration method, JE accounts, improve trigger). These params are what the Improve loop tunes; the algorithms stay in code.',
-    inputSchema: { slug: z.string().default(PROCESS_SLUG) },
-  },
-  async ({ slug }) => {
-    try {
-      const process = await prisma.process.findFirst({ where: { slug } });
-      if (!process) return text({ note: 'Process not seeded.' });
-      const policies = await prisma.policy.findMany({ where: { processId: process.id }, orderBy: { key: 'asc' } });
-      return text(policies.map((p) => ({ key: p.key, name: p.name, version: p.version, scope: p.scope, definition: p.definition, params: p.params })));
-    } catch (e) { return fail(e); }
-  },
-);
-
-// ── 10. Set a policy param (Improve action — new version) ──────────────────────
-server.registerTool(
-  'freight_set_policy',
-  {
-    title: 'Tune a policy param (new version)',
-    description:
-      'Apply an Improve proposal: update one or more params on a versioned policy, bumping its version. Changes affect FUTURE runs only (runs pin the version they used). Use to act on a reconciliation proposal, e.g. tighten the materiality threshold or change the baseline window.',
-    inputSchema: {
-      key: z.string().describe('Policy key, e.g. "materiality_gate", "baseline_window", "estimation_method".'),
-      params: z.record(z.any()).describe('Param fields to merge into the policy, e.g. { "materialityThreshold": 1200 }.'),
-      slug: z.string().default(PROCESS_SLUG),
-      approvedBy: z.string().default('Controller').describe('Who approved the change.'),
-    },
-  },
-  async ({ key, params, slug, approvedBy }) => {
-    try {
-      const process = await prisma.process.findFirst({ where: { slug } });
-      if (!process) return text({ note: 'Process not seeded.' });
-      const policy = await prisma.policy.findFirst({ where: { processId: process.id, key } });
-      if (!policy) return text({ note: `Policy "${key}" not found.` });
-      const before = policy.params || {};
-      const after = { ...before, ...params };
-      const updated = await prisma.policy.update({
-        where: { id: policy.id },
-        data: { params: after, version: policy.version + 1 },
-      });
-      // Record the version bump as an immutable ObjectVersion (audit of the Improve action).
-      await prisma.objectVersion.create({
-        data: {
-          objectType: 'policy', objectId: policy.id, version: updated.version,
-          diff: { before, after }, source: 'improve', approvedBy, approvedAt: new Date(),
-        },
-      }).catch(() => {});
-      return text({ key, newVersion: updated.version, before, after, note: 'Applies to future runs only.' });
-    } catch (e) { return fail(e); }
-  },
-);
-
-// ── 10b. Reconcile a posted run against actuals (writes Reconciliation) ───────
-server.registerTool(
-  'freight_reconcile_run',
+  'run_reconcile',
   {
     title: 'Reconcile a run against actuals',
     description:
-      'Post-close reconciliation: compare a posted/frozen run\'s booked accrual to the real invoiced actuals, writing immutable per-carrier Reconciliation rows and a variance. If the portfolio variance breaches materiality, a true-up JE is staged. Actuals are resolved from the period\'s invoiced truth unless supplied. This is the real post-period half of the loop (freight_reconcile only replays history).',
+      'Post-close reconciliation: compare a posted/frozen run\'s booked number to the real actuals, writing immutable per-line Reconciliation rows and a variance. If the portfolio variance breaches materiality, a true-up JE is staged. Actuals are resolved from the period\'s invoiced truth unless supplied.',
     inputSchema: {
       runId: z.string().describe('The run to reconcile (must be posted or frozen).'),
-      actuals: z.record(z.number()).optional().describe('Optional actuals by carrier, e.g. { "peak": 34216.86 }. Omit to use the period truth.'),
+      actuals: z.record(z.number()).optional().describe('Optional actuals by line key, e.g. { "peak": 34216.86 }. Omit to use the period truth.'),
       actor: z.string().default('Reconciliation Agent'),
     },
   },
@@ -300,9 +146,12 @@ server.registerTool(
   },
 );
 
-// ── 10c. Generate improvement proposals (param-targeted) ──────────────────────
+// ── Improve ──────────────────────────────────────────────────────────────────
+// The self-review loop: propose param-targeted improvements, apply one, audit.
+
+// ── 7. Generate improvement proposals (param-targeted) ────────────────────────
 server.registerTool(
-  'freight_propose',
+  'improve_propose',
   {
     title: 'Generate improvement proposals',
     description:
@@ -315,9 +164,9 @@ server.registerTool(
   },
 );
 
-// ── 10d. Apply a proposal → bump policy version + ObjectVersion ───────────────
+// ── 8. Apply a proposal → bump policy version + ObjectVersion ─────────────────
 server.registerTool(
-  'freight_apply_proposal',
+  'improve_apply',
   {
     title: 'Apply an improvement proposal',
     description:
@@ -330,9 +179,9 @@ server.registerTool(
   },
 );
 
-// ── 10e. Read the policy version history (audit of Improve actions) ───────────
+// ── 9. Read the policy version history (audit of Improve actions) ─────────────
 server.registerTool(
-  'freight_list_versions',
+  'improve_list_versions',
   {
     title: 'List policy version history',
     description: 'Return the ObjectVersion audit trail for the process\'s policies — every Improve action that changed a param, with before → after diffs and who approved it.',
@@ -344,7 +193,7 @@ server.registerTool(
   },
 );
 
-// ── 11–24. Process configuration (construct-a-process surface) ────────────────
+// ── Process configuration (construct-a-process surface) ───────────────────────
 // These let an agent define ANY process end to end — definition, steps, policies,
 // tool bindings — the exact mutations a human makes on the Setup page. They share
 // services/accrual/configService.js with the REST API and the UI forms.
@@ -367,6 +216,60 @@ server.registerTool(
     inputSchema: { slug: z.string().describe('Process slug.') },
   },
   async ({ slug }) => { try { return text(await cfg.getProcessConfig(slug)); } catch (e) { return fail(e); } },
+);
+
+server.registerTool(
+  'process_get_policies',
+  {
+    title: 'Get versioned policies',
+    description: 'Return the versioned policy objects that parameterize a process (e.g. materiality gate, baseline window, estimation method, calibration method, JE accounts, improve trigger). These params are what the Improve loop tunes; the algorithms stay in code.',
+    inputSchema: { slug: z.string().default(PROCESS_SLUG) },
+  },
+  async ({ slug }) => {
+    try {
+      const process = await prisma.process.findFirst({ where: { slug } });
+      if (!process) return text({ note: 'Process not found.' });
+      const policies = await prisma.policy.findMany({ where: { processId: process.id }, orderBy: { key: 'asc' } });
+      return text(policies.map((p) => ({ key: p.key, name: p.name, version: p.version, scope: p.scope, definition: p.definition, params: p.params })));
+    } catch (e) { return fail(e); }
+  },
+);
+
+server.registerTool(
+  'process_set_policy',
+  {
+    title: 'Tune a policy param (new version)',
+    description:
+      'Update one or more params on a versioned policy by its stable key, bumping its version and writing an immutable ObjectVersion audit row. Changes affect FUTURE runs only (runs pin the version they used). Use to act on a reconciliation proposal, e.g. tighten the materiality threshold or change the baseline window.',
+    inputSchema: {
+      key: z.string().describe('Policy key, e.g. "materiality_gate", "baseline_window", "estimation_method".'),
+      params: z.record(z.any()).describe('Param fields to merge into the policy, e.g. { "materialityThreshold": 1200 }.'),
+      slug: z.string().default(PROCESS_SLUG),
+      approvedBy: z.string().default('Controller').describe('Who approved the change.'),
+    },
+  },
+  async ({ key, params, slug, approvedBy }) => {
+    try {
+      const process = await prisma.process.findFirst({ where: { slug } });
+      if (!process) return text({ note: 'Process not found.' });
+      const policy = await prisma.policy.findFirst({ where: { processId: process.id, key } });
+      if (!policy) return text({ note: `Policy "${key}" not found.` });
+      const before = policy.params || {};
+      const after = { ...before, ...params };
+      const updated = await prisma.policy.update({
+        where: { id: policy.id },
+        data: { params: after, version: policy.version + 1 },
+      });
+      // Record the version bump as an immutable ObjectVersion (audit of the Improve action).
+      await prisma.objectVersion.create({
+        data: {
+          objectType: 'policy', objectId: policy.id, version: updated.version,
+          diff: { before, after }, source: 'improve', approvedBy, approvedAt: new Date(),
+        },
+      }).catch(() => {});
+      return text({ key, newVersion: updated.version, before, after, note: 'Applies to future runs only.' });
+    } catch (e) { return fail(e); }
+  },
 );
 
 server.registerTool(
@@ -496,7 +399,7 @@ server.registerTool(
   'process_update_policy',
   {
     title: 'Update a policy',
-    description: 'Edit a policy\'s definition and/or params. Bumps the policy version. (For tuning freight policy params specifically, freight_set_policy also records an ObjectVersion audit.)',
+    description: 'Edit a policy\'s definition and/or params by its uuid. Bumps the policy version. (To tune a param by its stable key and record an Improve ObjectVersion audit, use process_set_policy.)',
     inputSchema: {
       slug: z.string(),
       policyId: z.string().describe('Policy id (uuid) from process_get_config.'),
@@ -566,7 +469,7 @@ server.registerTool(
   async ({ slug, stepToolId }) => { try { return text(await cfg.detachStepTool(slug, stepToolId)); } catch (e) { return fail(e); } },
 );
 
-// ── 31–33. Process Owner Agent & proactive supervision ───────────────────────
+// ── Process Owner Agent & proactive supervision ──────────────────────────────
 // Every process is owned by one supervisor agent (auto-provisioned on create).
 // The agent is NOT in the critical path — it observes, explains, and can trigger
 // or nudge. These tools let an external orchestrator read the owner agent and run
@@ -624,7 +527,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // stderr only — stdout is the MCP channel.
-  console.error('Ridgeline Finance OS MCP server running on stdio. 33 tools registered.');
+  console.error('Ridgeline Finance OS MCP server running on stdio. 30 tools registered.');
 }
 
 main().catch((e) => { console.error('MCP fatal:', e); process.exit(1); });

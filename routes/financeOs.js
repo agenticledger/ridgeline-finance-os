@@ -13,10 +13,13 @@
 const express = require('express');
 const path = require('path');
 const prisma = require('../services/db');
-const { executeRun, signOff, freezeRun, getRun, listRuns, PROCESS_SLUG } = require('../services/accrual/runService');
+const { signOff, freezeRun, getRun, listRuns, listRunHistory, PROCESS_SLUG } = require('../services/accrual/runService');
+const { runProcess } = require('../services/runner/processRunner');
+const { buildOverview } = require('../services/runner/overviewBuilder');
+const { generateInsight } = require('../services/runner/insightService');
 const { reconcileRun } = require('../services/accrual/reconcileService');
 const improve = require('../services/accrual/improveService');
-const { listProcesses, createProcess, SUBFUNCTIONS } = require('../services/accrual/processService');
+const { listProcesses, SUBFUNCTIONS, SUBFUNCTION_SLUGS } = require('../services/accrual/processService');
 const cfg = require('../services/accrual/configService');
 const automator = require('../services/accrual/automatorService');
 const { API_GROUPS, endpointCount } = require('../docs/catalog');
@@ -55,7 +58,7 @@ const TOOL_TYPE_META = {
 };
 
 const router = express.Router();
-const TABS = ['monitor', 'execute', 'improve', 'setup'];
+const TABS = ['monitor', 'execute', 'flow', 'improve', 'history', 'setup'];
 
 async function loadProcessFull(slug) {
   return prisma.process.findFirst({
@@ -80,7 +83,11 @@ async function buildView(req, res, slug, active) {
   const selectedId = req.query.run || (runs[0] && runs[0].id);
   const run = selectedId ? await getRun(selectedId) : null;
   const processes = await listProcesses();
-  const runnable = process.slug === PROCESS_SLUG;
+  // Any process with steps can execute via the generic scaffold runner. Freight (and
+  // any process whose steps carry an engineSource) is additionally "engine-bound".
+  const runnable = Array.isArray(process.steps) && process.steps.length > 0;
+  const engineBound = process.slug === PROCESS_SLUG
+    || (process.steps || []).some((s) => s.engineSource);
   const SECTIONS = ['overview', 'steps'];
   const section = active === 'setup'
     ? (SECTIONS.includes(req.query.section) ? req.query.section : 'overview')
@@ -92,6 +99,8 @@ async function buildView(req, res, slug, active) {
   // Improve plane: persisted proposals (scoped to the selected run) + version history.
   const proposals = active === 'improve' ? await improve.listProposals(slug, { runId: selectedId || null }) : [];
   const versions = active === 'improve' ? await improve.listVersions(slug) : [];
+  // Run history: every run for this process with its headline numbers.
+  const historyRuns = active === 'history' ? await listRunHistory(slug) : [];
 
   // The Process Owner Agent — the supervisor that watches this process. Surfaced
   // in the sub-header and the chat dock so the operator can talk to it live.
@@ -132,15 +141,19 @@ async function buildView(req, res, slug, active) {
     process,
     processes,
     runnable,
+    engineBound,
+    justRan: !!req.query.ran,
     runs,
     run,
     allTools,
     orgUnits,
     proposals,
     versions,
+    historyRuns,
     ownerAgent,
     subfunctions: SUBFUNCTIONS,
     summary: run ? run.summary : null,
+    overview: run ? buildOverview({ proc: process, run, summary: run.summary }) : null,
     pageTitle: `Ridgeline Finance OS — ${process.name} · ${active[0].toUpperCase() + active.slice(1)}`,
     pageDescription: `${process.name} — ${active}. Beats the trailing-3-month average with an auditable, gated accrual.`,
   });
@@ -148,21 +161,8 @@ async function buildView(req, res, slug, active) {
 
 router.get('/', (req, res, next) => buildView(req, res, PROCESS_SLUG, 'monitor').catch(next));
 
-router.get('/process/new', async (req, res, next) => {
-  try {
-    const processes = await listProcesses();
-    const presetFn = SUBFUNCTIONS.find((s) => s.slug === req.query.function) || null;
-    res.render('process-new', {
-      processes,
-      subfunctions: SUBFUNCTIONS,
-      presetFunctionName: presetFn ? presetFn.name : '',
-      presetFunctionSlug: presetFn ? presetFn.slug : '',
-      org: processes[0] ? processes[0].org : 'Ridgeline Foods, Inc.',
-      pageTitle: 'Ridgeline Finance OS — New process',
-      pageDescription: 'Define a new finance process on the Ridgeline Finance OS model.',
-    });
-  } catch (e) { next(e); }
-});
+// Manual /process/new form was removed (decision §14.8). New processes are born
+// agentically via the automator (the owner agent builds the package).
 
 // Process automator — AI-built processes. Page + propose/apply JSON endpoints.
 router.get('/automator', async (req, res, next) => {
@@ -269,6 +269,7 @@ router.get('/processes/live', async (req, res, next) => {
     // Architecture read: Org → Area (sub-function) → Process. The owning agent is
     // NOT a sibling here — it lives inside each process's schematic view.
     const nav = [];
+    const laneCards = new Map(); // fn slug -> [{ ...process card }]
     groups.forEach((g) => {
       const fnId = `fn:${g.slug}`;
       let fnSignal = 'idle';
@@ -282,19 +283,32 @@ router.get('/processes/live', async (req, res, next) => {
         if (rank[signal] > rank[fnSignal]) fnSignal = signal;
 
         const pid = `pr:${p.id}`;
-        nodes.push({
-          id: pid, type: 'process', label: p.name, slug: p.slug, signal, col: 2,
-          sublabel: `${p._count.steps} steps · ${p._count.runs} runs`,
-          frequency: p.frequency, mode: p.mode, fn: g.name, fnSlug: g.slug,
+        const card = {
+          id: pid, label: p.name, slug: p.slug, signal,
+          steps: p._count.steps, runs: p._count.runs,
+          frequency: p.frequency, mode: p.mode,
           period: p.runs[0] ? p.runs[0].period : null,
-        });
+        };
+        nodes.push({ ...card, type: 'process', col: 2, sublabel: `${p._count.steps} steps · ${p._count.runs} runs`, fn: g.name, fnSlug: g.slug });
         edges.push({ from: fnId, to: pid, signal });
         navProcs.push({ slug: p.slug, name: p.name });
+        if (!laneCards.has(g.slug)) laneCards.set(g.slug, []);
+        laneCards.get(g.slug).push(card);
       });
       nodes.push({ id: fnId, type: 'function', label: g.name, slug: g.slug, signal: fnSignal, col: 1, sublabel: `${g.list.length} process${g.list.length === 1 ? '' : 'es'}` });
       edges.push({ from: ORG_ID, to: fnId, signal: fnSignal });
       nav.push({ slug: g.slug, name: g.name, processes: navProcs });
     });
+
+    // Swimlanes: one per canonical sub-function (ALWAYS shown, even empty), then any
+    // non-canonical buckets (e.g. Unassigned). Each lane carries its process cards.
+    const laneFor = (slug, name, icon) => {
+      const procs = laneCards.get(slug) || [];
+      const signal = procs.reduce((acc, c) => (rank[c.signal] > rank[acc] ? c.signal : acc), 'idle');
+      return { slug, name, icon: icon || null, signal, processes: procs };
+    };
+    const lanes = SUBFUNCTIONS.map((s) => laneFor(s.slug, s.name, s.icon));
+    groups.filter((g) => !SUBFUNCTION_SLUGS.has(g.slug)).forEach((g) => lanes.push(laneFor(g.slug, g.name, null)));
 
     const counts = {
       total: rows.length,
@@ -304,7 +318,7 @@ router.get('/processes/live', async (req, res, next) => {
     };
 
     res.render('processes-live', {
-      graph: { nodes, edges, mode: 'overview' },
+      graph: { nodes, edges, mode: 'overview', lanes },
       counts, nav, org: orgName, hud: null, current: null,
       pageTitle: 'Ridgeline Finance OS — Live Map',
       pageDescription: 'A living view of every finance process and the agents running them.',
@@ -525,19 +539,20 @@ router.get('/docs/mcp', (req, res) => {
   });
 });
 
-router.post('/process/new', async (req, res, next) => {
+router.post('/process/:slug/run', async (req, res, next) => {
   try {
-    const { name, functionName, functionSlug, frequency, mode, description, template } = req.body;
-    const p = await createProcess({ name, functionName, functionSlug, frequency, mode, description, template });
-    res.redirect(`/process/${p.slug}/setup`);
+    const r = await runProcess({ processSlug: req.params.slug, period: req.body.period || 'April 2026', mode: req.body.mode || 'manual' });
+    res.redirect(`/process/${req.params.slug}/monitor?run=${r.runId}&ran=1`);
   } catch (e) { next(e); }
 });
 
-router.post('/process/:slug/run', async (req, res, next) => {
+// AI insight — the owner agent narrates the overview into a few bullets, using a
+// summary prompt stored in the registry. Cached on the run; JSON for the UI button.
+router.post('/process/:slug/insight', async (req, res) => {
   try {
-    const r = await executeRun({ period: req.body.period || 'April 2026', mode: req.body.mode || 'manual' });
-    res.redirect(`/process/${req.params.slug}/monitor?run=${r.runId}`);
-  } catch (e) { next(e); }
+    const out = await generateInsight({ slug: req.params.slug, runId: req.body.run || req.query.run || null });
+    res.json({ ok: true, data: out });
+  } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message || String(e) }); }
 });
 
 router.post('/run/:runId/signoff', async (req, res, next) => {
@@ -576,132 +591,10 @@ router.post('/improve/proposal/:proposalId/apply', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ── Configure: edit the process definition spine ──────────────────────────
-// All mutations delegate to services/accrual/configService.js — the same code
-// path the JSON API (/api/fos/...) uses, so the UI and agents never drift.
-
-router.post('/process/:slug/config/definition', async (req, res, next) => {
-  try {
-    await cfg.updateDefinition(req.params.slug, req.body);
-    res.redirect(`/process/${req.params.slug}/setup?section=overview`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/improve', async (req, res, next) => {
-  try {
-    await cfg.updateImproveTrigger(req.params.slug, req.body);
-    res.redirect(`/process/${req.params.slug}/setup?section=improve`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/step/add', async (req, res, next) => {
-  try {
-    await cfg.addStep(req.params.slug, {
-      name: req.body.name,
-      description: req.body.description,
-      decisionType: req.body.decisionType,
-      engineSource: req.body.engineSource,
-      toolId: req.body.toolId,
-    });
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/step/:stepId/delete', async (req, res, next) => {
-  try {
-    await cfg.deleteStep(req.params.slug, req.params.stepId);
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/step/:stepId', async (req, res, next) => {
-  try {
-    await cfg.updateStep(req.params.slug, req.params.stepId, {
-      name: req.body.name,
-      description: req.body.description,
-      decisionType: req.body.decisionType,
-      engineSource: req.body.engineSource,
-      toolId: req.body.toolId,
-      isGate: req.body.isGate === 'on',
-      pauseAfter: req.body.pauseAfter === 'on',
-    });
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-// Attach a tool from the library to a step.
-router.post('/process/:slug/config/step/:stepId/tools/attach', async (req, res, next) => {
-  try {
-    if (req.body.toolId) {
-      await cfg.attachStepTool(req.params.slug, req.params.stepId, { toolId: req.body.toolId, role: req.body.role });
-    }
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-// Detach a tool from a step.
-router.post('/process/:slug/config/step/:stepId/tools/:stepToolId/detach', async (req, res, next) => {
-  try {
-    await cfg.detachStepTool(req.params.slug, req.params.stepToolId);
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/policy/add', async (req, res, next) => {
-  try {
-    await cfg.addPolicy(req.params.slug, {
-      name: req.body.name,
-      definition: req.body.definition,
-      stepId: req.body.stepId || null,
-    });
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/policy/:policyId/delete', async (req, res, next) => {
-  try {
-    await cfg.deletePolicy(req.params.slug, req.params.policyId);
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/policy/:policyId', async (req, res, next) => {
-  try {
-    const policy = await prisma.policy.findUnique({ where: { id: req.params.policyId } });
-    if (!policy) return res.status(404).send('Policy not found.');
-    const oldParams = policy.params || {};
-    const keys = [].concat(req.body.pkey || []);
-    const vals = [].concat(req.body.pval || []);
-    const params = {};
-    keys.forEach((k, i) => {
-      if (!k) return;
-      const raw = vals[i] === undefined ? '' : vals[i];
-      const orig = oldParams[k];
-      if (typeof orig === 'boolean' || raw === 'true' || raw === 'false') {
-        params[k] = raw === 'true' || raw === true;
-      } else if (raw !== '' && !Number.isNaN(Number(raw)) && /^-?\d*\.?\d+$/.test(String(raw).trim())) {
-        params[k] = Number(raw);
-      } else {
-        params[k] = raw;
-      }
-    });
-    await cfg.updatePolicy(req.params.slug, req.params.policyId, { definition: req.body.definition, params });
-    res.redirect(`/process/${req.params.slug}/setup?section=steps`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/tools/map', async (req, res, next) => {
-  try {
-    if (req.body.toolId) await cfg.mapTool(req.params.slug, { toolId: req.body.toolId, role: req.body.role });
-    res.redirect(`/process/${req.params.slug}/setup?section=tools`);
-  } catch (e) { next(e); }
-});
-
-router.post('/process/:slug/config/tools/:processToolId/unmap', async (req, res, next) => {
-  try {
-    await prisma.processTool.delete({ where: { id: req.params.processToolId } });
-    res.redirect(`/process/${req.params.slug}/setup?section=tools`);
-  } catch (e) { next(e); }
-});
+// Manual process create + step/policy/tool edit FORM endpoints were REMOVED
+// (decision §14.8: agentic-only creation AND modification). A process is created
+// and modified ONLY through its owner agent (the automator + the fos__ Builder
+// tools). The Setup tab is now read-only package inspection; the JSON API
+// (/api/fos/...) remains for programmatic access.
 
 module.exports = router;

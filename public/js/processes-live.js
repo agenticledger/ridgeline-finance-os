@@ -47,51 +47,83 @@
   }
 
   // ---------------------------------------------------------------- OVERVIEW
+  // Swimlanes: one horizontal lane per finance area (always shown, even empty),
+  // each holding its process cards. Org banner on top; click a card to fly in.
   function renderOverview() {
-    var DIM = { org: { w: 170, h: 62 }, function: { w: 184, h: 58 }, process: { w: 210, h: 70 }, agent: { w: 168, h: 50 } };
-    var COL_X = [60, 360, 700, 1040];
-    var ROW = 96, PAD = 60;
+    var lanes = G.lanes || [];
+    var sigLabel = { idle: 'IDLE', live: 'LIVE', attention: 'NEEDS YOU', posted: 'POSTED' };
 
-    var procs = G.nodes.filter(function (n) { return n.type === 'process'; });
-    procs.forEach(function (n, i) { n._y = PAD + i * ROW; n._x = COL_X[2]; });
+    var PAD = 56;
+    var LABEL_W = 236;                 // left rail (area name) width
+    var CARD = { w: 250, h: 78 }, CARD_GAP = 18, COLS = 4, ROW_GAP = 16;
+    var LANE_PADX = 22, LANE_PADY = 18, LANE_GAP = 16;
+    var BANNER_H = 66;
 
-    var childY = {};
-    G.edges.forEach(function (e) { (childY[e.from] = childY[e.from] || []).push(e.to); });
-    function avgChildY(id) {
-      var kids = (childY[id] || []).map(function (cid) { return byId[cid] && byId[cid]._y; }).filter(function (v) { return typeof v === 'number'; });
-      if (!kids.length) return PAD;
-      return kids.reduce(function (a, b) { return a + b; }, 0) / kids.length;
-    }
-    G.nodes.filter(function (n) { return n.type === 'function'; }).forEach(function (n) { n._y = avgChildY(n.id); n._x = COL_X[1]; });
-    G.nodes.filter(function (n) { return n.type === 'org'; }).forEach(function (n) { n._y = avgChildY(n.id); n._x = COL_X[0]; });
-
-    var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-    G.nodes.forEach(function (n) { var d = DIM[n.type]; minX = Math.min(minX, n._x); minY = Math.min(minY, n._y - d.h / 2); maxX = Math.max(maxX, n._x + d.w); maxY = Math.max(maxY, n._y + d.h / 2); });
-    W = (maxX - minX) + PAD * 2; H = (maxY - minY) + PAD * 2;
-    var OX = -minX + PAD, OY = -minY + PAD;
+    var contentW = COLS * CARD.w + (COLS - 1) * CARD_GAP;
+    var laneW = LABEL_W + LANE_PADX + contentW + LANE_PADX;
+    W = PAD * 2 + laneW;
 
     var parts = []; defs(parts);
-    G.edges.forEach(function (e, idx) {
-      var a = byId[e.from], b = byId[e.to]; if (!a || !b) return;
-      var da = DIM[a.type], db = DIM[b.type];
-      edge(parts, a._x + da.w + OX, a._y + OY, b._x + OX, b._y + OY, e.signal, idx, false, false);
-    });
-    G.nodes.forEach(function (n) {
-      var d = DIM[n.type];
-      var x = n._x + OX, y = (n._y + OY) - d.h / 2;
-      var dataFn = n.type === 'process' ? n.fnSlug : (n.type === 'function' ? n.slug : '');
-      var clickJs = n.type === 'process' ? ('lmFlyTo(this,\'/processes/live/' + n.slug + '\')') : '';
-      parts.push('<g class="lm-node ' + n.type + ' ' + (n.signal || 'idle') + '"' + (dataFn ? ' data-fn="' + esc(dataFn) + '"' : '') + (clickJs ? ' onclick="' + clickJs + '"' : '') + '>');
-      parts.push('<rect class="lm-box" x="' + x + '" y="' + y + '" width="' + d.w + '" height="' + d.h + '" rx="12"/>');
-      parts.push('<circle class="lm-dot ' + (n.signal || 'idle') + '" cx="' + (x + 14) + '" cy="' + (y + 16) + '" r="4.5" fill="' + (sigStroke[n.signal] || sigStroke.idle) + '"/>');
-      parts.push('<text class="lm-title" x="' + (x + 28) + '" y="' + (y + 26) + '" font-size="' + (n.type === 'process' ? 14 : 13) + '">' + esc(clip(n.label, n.type === 'process' ? 22 : 20)) + '</text>');
-      if (n.sublabel) parts.push('<text class="lm-sub" x="' + (x + 28) + '" y="' + (y + 44) + '" font-size="10.5">' + esc(n.sublabel) + '</text>');
-      if (n.type === 'process') {
-        parts.push('<text class="lm-tag" x="' + (x + d.w - 12) + '" y="' + (y + 26) + '" text-anchor="end" font-size="9.5" fill="' + (sigStroke[n.signal] || sigStroke.idle) + '">' + esc((n.signal || 'idle').toUpperCase()) + '</text>');
-        if (n.frequency) parts.push('<text class="lm-sub" x="' + (x + d.w - 12) + '" y="' + (y + 44) + '" text-anchor="end" font-size="10">' + esc(n.frequency + ' · ' + n.mode) + '</text>');
+    var x0 = PAD;
+
+    // Org banner.
+    var orgNode = byId['org'];
+    var org = (orgNode && orgNode.label) || 'Ridgeline Foods';
+    parts.push('<g class="lm-banner">');
+    parts.push('<rect x="' + x0 + '" y="' + PAD + '" width="' + laneW + '" height="' + BANNER_H + '" rx="14"/>');
+    parts.push('<text class="lm-banner-t" x="' + (x0 + 22) + '" y="' + (PAD + 30) + '">' + esc(org) + '</text>');
+    parts.push('<text class="lm-banner-s" x="' + (x0 + 22) + '" y="' + (PAD + 50) + '">Finance OS — every area, live</text>');
+    var act = lanes.filter(function (l) { return l.processes.length; }).length;
+    parts.push('<text class="lm-banner-s" x="' + (x0 + laneW - 22) + '" y="' + (PAD + 40) + '" text-anchor="end">' + lanes.length + ' areas · ' + act + ' active</text>');
+    parts.push('</g>');
+
+    var y = PAD + BANNER_H + LANE_GAP + 6;
+
+    lanes.forEach(function (l, li) {
+      var sig = l.signal || 'idle';
+      var procs = l.processes || [];
+      var rows = Math.max(1, Math.ceil(procs.length / COLS));
+      var laneH = LANE_PADY * 2 + rows * CARD.h + (rows - 1) * ROW_GAP;
+      var contentX = x0 + LABEL_W + LANE_PADX;
+
+      parts.push('<g class="lm-lane ' + sig + (procs.length ? '' : ' empty') + '" data-fn="' + esc(l.slug) + '">');
+      // lane background + left accent bar
+      parts.push('<rect class="lm-lanebg ' + (li % 2 ? 'alt' : '') + '" x="' + x0 + '" y="' + y + '" width="' + laneW + '" height="' + laneH + '" rx="14"/>');
+      parts.push('<rect class="lm-laneaccent ' + sig + '" x="' + x0 + '" y="' + y + '" width="5" height="' + laneH + '" rx="2.5" fill="' + (sigStroke[sig] || sigStroke.idle) + '"/>');
+      // flowing particles up the accent bar for live/attention lanes
+      if (sig === 'live' || sig === 'attention') edge(parts, x0 + 2.5, y + laneH - 8, x0 + 2.5, y + 8, sig, 'L' + li, true, false);
+      // rail: area name + status
+      var ry = y + laneH / 2;
+      parts.push('<circle class="lm-dot ' + sig + '" cx="' + (x0 + 24) + '" cy="' + (ry - 10) + '" r="5" fill="' + (sigStroke[sig] || sigStroke.idle) + '"/>');
+      parts.push('<text class="lm-lane-t" x="' + (x0 + 38) + '" y="' + (ry - 5) + '">' + esc(clip(l.name, 26)) + '</text>');
+      parts.push('<text class="lm-lane-s" x="' + (x0 + 38) + '" y="' + (ry + 14) + '">' + procs.length + ' process' + (procs.length === 1 ? '' : 'es') + '</text>');
+      if (sig !== 'idle') parts.push('<text class="lm-lane-tag ' + sig + '" x="' + (x0 + 38) + '" y="' + (ry + 32) + '" fill="' + (sigStroke[sig] || sigStroke.idle) + '">' + sigLabel[sig] + '</text>');
+      // divider
+      parts.push('<line class="lm-lanediv" x1="' + (x0 + LABEL_W) + '" y1="' + (y + 12) + '" x2="' + (x0 + LABEL_W) + '" y2="' + (y + laneH - 12) + '"/>');
+
+      if (!procs.length) {
+        parts.push('<text class="lm-empty" x="' + (contentX + 6) + '" y="' + (y + laneH / 2 + 4) + '">No process here yet</text>');
+      } else {
+        procs.forEach(function (p, i) {
+          var cx = contentX + (i % COLS) * (CARD.w + CARD_GAP);
+          var cy = y + LANE_PADY + Math.floor(i / COLS) * (CARD.h + ROW_GAP);
+          var psig = p.signal || 'idle';
+          parts.push('<g class="lm-node process ' + psig + '" data-fn="' + esc(l.slug) + '" onclick="lmFlyTo(this,\'/processes/live/' + esc(p.slug) + '\')">');
+          parts.push('<rect class="lm-box" x="' + cx + '" y="' + cy + '" width="' + CARD.w + '" height="' + CARD.h + '" rx="12"/>');
+          parts.push('<circle class="lm-dot ' + psig + '" cx="' + (cx + 15) + '" cy="' + (cy + 17) + '" r="4.5" fill="' + (sigStroke[psig] || sigStroke.idle) + '"/>');
+          parts.push('<text class="lm-title" x="' + (cx + 28) + '" y="' + (cy + 27) + '" font-size="14.5">' + esc(clip(p.label, 24)) + '</text>');
+          parts.push('<text class="lm-sub" x="' + (cx + 28) + '" y="' + (cy + 46) + '" font-size="10.5">' + esc(p.steps + ' steps · ' + p.runs + ' runs') + '</text>');
+          parts.push('<text class="lm-tag" x="' + (cx + CARD.w - 12) + '" y="' + (cy + 27) + '" text-anchor="end" font-size="9.5" fill="' + (sigStroke[psig] || sigStroke.idle) + '">' + esc(sigLabel[psig] || psig.toUpperCase()) + '</text>');
+          if (p.frequency) parts.push('<text class="lm-sub" x="' + (cx + CARD.w - 12) + '" y="' + (cy + 46) + '" text-anchor="end" font-size="10">' + esc(p.frequency + ' · ' + p.mode) + '</text>');
+          parts.push('<text class="lm-go" x="' + (cx + CARD.w - 14) + '" y="' + (cy + CARD.h - 10) + '" text-anchor="end" font-size="9.5">open schematic →</text>');
+          parts.push('</g>');
+        });
       }
       parts.push('</g>');
+      y += laneH + LANE_GAP;
     });
+
+    H = y - LANE_GAP + PAD;
     paint(parts);
   }
 
@@ -279,9 +311,20 @@
   window.lmFit = function () {
     svg.classList.add('no-anim');
     var r = stage.getBoundingClientRect();
-    var s = Math.min(r.width / W, r.height / H) * 0.9;
-    scale = Math.max(0.2, Math.min(1.4, s));
-    tx = (r.width - W * scale) / 2; ty = (r.height - H * scale) / 2; apply();
+    if (G.mode === 'schematic') {
+      // Schematic graphs are roughly square — fit the whole thing, centered.
+      var s = Math.min(r.width / W, r.height / H) * 0.9;
+      scale = Math.max(0.2, Math.min(1.4, s));
+      tx = (r.width - W * scale) / 2; ty = (r.height - H * scale) / 2;
+    } else {
+      // Overview swimlanes are tall — fit to WIDTH so the lanes are big and
+      // readable, pin to the top, and let the user pan/scroll down through them.
+      var sw = (r.width / W) * 0.98;
+      scale = Math.max(0.55, Math.min(1.25, sw));
+      tx = Math.max(16, (r.width - W * scale) / 2);
+      ty = 16;
+    }
+    apply();
     requestAnimationFrame(function () { svg.classList.remove('no-anim'); });
   };
   var dragging = false, sx = 0, sy = 0, otx = 0, oty = 0;
@@ -311,7 +354,7 @@
   var bu = document.getElementById('lm-bu');
   if (bu) bu.addEventListener('change', function () {
     var v = this.value;
-    svg.querySelectorAll('.lm-node[data-fn]').forEach(function (g) { g.classList.toggle('lm-dim', !!v && g.getAttribute('data-fn') !== v); });
+    svg.querySelectorAll('[data-fn]').forEach(function (g) { g.classList.toggle('lm-dim', !!v && g.getAttribute('data-fn') !== v); });
   });
   var proc = document.getElementById('lm-proc');
   if (proc) proc.addEventListener('change', function () { if (this.value) window.location = '/processes/live/' + this.value; });

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=15">
+  <link rel="stylesheet" href="/css/fos.css?v=24">
   <style>
     .viewtoggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; margin-left: 4px; }
     .viewtoggle a { padding: 6px 13px; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-2); text-decoration: none; display: flex; align-items: center; gap: 6px; }
@@ -68,7 +68,7 @@
       <a href="/processes/live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3M9 18h6a3 3 0 0 0 3-3"/></svg>Live Map</a>
     </div>
     <div class="grow" style="flex:1"></div>
-    <a class="btn primary cmd-new" href="/process/new">+ New process</a>
+    <a class="btn primary cmd-new" href="/automator">+ New process</a>
   </div>
 
   <% subs.forEach(function(sf){
@@ -88,7 +88,7 @@
         <% if(sigs.live){ %><span class="sig-dot live" title="Running"></span><% } %>
         <% if(sigs.posted){ %><span class="sig-dot posted" title="Posted"></span><% } %>
         <span class="fnsec-count"><%= list.length %></span>
-        <a class="fnsec-add" href="/process/new?function=<%= sf.slug %>" title="Add a process to <%= sf.name %>">+ Add</a>
+        <a class="fnsec-add" href="/automator?function=<%= sf.slug %>" title="Add a process to <%= sf.name %>">+ Add</a>
       </summary>
       <div class="fnsec-body">
         <% if(list.length){ %>
@@ -113,7 +113,7 @@
             <% }) %>
           </div>
         <% } else { %>
-          <a class="fnempty" href="/process/new?function=<%= sf.slug %>">
+          <a class="fnempty" href="/automator?function=<%= sf.slug %>">
             <span class="fe-plus">+</span>
             <span>No processes yet. <b>Define one</b> on the Finance OS model.</span>
           </a>

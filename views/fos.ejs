@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=15">
+  <link rel="stylesheet" href="/css/fos.css?v=24">
 </head>
 <body>
 <%
@@ -45,7 +45,7 @@
 <%
   const needsYou = (st==='awaiting_human'||st==='needs_review');
   const cfgLabels = {overview:'Definition',steps:'Steps',policies:'Policies',tools:'Tools',improve:'Improvement'};
-  const opLabels = {monitor:'Overview',execute:'Execute',improve:'Improve'};
+  const opLabels = {monitor:'Overview',execute:'Execute',flow:'Flow',improve:'Improve',history:'History'};
   const crumbLast = active==='setup' ? (cfgLabels[section]||'Configure') : (opLabels[active]||'Overview');
 %>
 <!-- ── Global topbar (tenant = Organization) ─────────────── -->
@@ -78,20 +78,34 @@
     <span class="wsub-agent-txt"><small>Supervised by</small><b><%= ownerAgent.name %></b></span>
   </button>
   <% } %>
-  <span class="wsub-badge <%= runnable?'bound':'defined' %>"><span class="d"></span><%= runnable?'Engine-bound':'Defined' %></span>
+  <span class="wsub-badge <%= runnable?'bound':'defined' %>"><span class="d"></span><%= engineBound?'Engine-bound':(runnable?'Ready to run':'Defined') %></span>
 </div></div>
 
-<div class="wshell <%= active==='setup'?'cfg':'' %>">
+<div class="wshell <%= (active==='setup'||active==='history'||active==='flow')?'cfg':'' %>">
   <%- include('fos/worknav', {proc,active,section,runnable,run,needsYou}) %>
   <div class="main">
+  <% if(typeof justRan !== 'undefined' && justRan && run){ %>
+    <div class="run-toast" id="runToast" role="status">
+      <span class="rt-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+      <div class="rt-tx"><b>New run complete.</b> You&rsquo;re now viewing the <%= run.period %> run &mdash; <%= run.status.replace(/_/g,' ') %><%= runTime ? (' · ' + runTime) : '' %>.</div>
+      <button type="button" class="rt-x" onclick="document.getElementById('runToast').remove()" aria-label="Dismiss">&times;</button>
+    </div>
+  <% } %>
   <% if(active==='setup'){ %>
     <%- include('fos/setup', {proc,section,fmt0,runnable,allTools,subfunctions,orgUnits}) %>
+  <% } else if(active==='history'){ %>
+    <%- include('fos/history', {proc,historyRuns,run,fmt0,signed}) %>
   <% } else if(!run && runnable){ %>
     <div class="card pad" style="text-align:center;padding:50px">
       <div class="eyebrow">No runs yet</div>
       <h1 style="margin:10px 0 6px;font-size:24px">Run the <%= proc.name %></h1>
+      <% if(proc.slug==='freight-accrual'){ %>
       <p style="color:var(--ink-2);max-width:48ch;margin:0 auto 20px">Estimate April freight expense from shipment activity and the carrier rate cards.</p>
-      <form method="POST" action="/process/<%= proc.slug %>/run"><button class="btn primary">Run accrual for April 2026</button></form>
+      <form method="POST" action="/process/<%= proc.slug %>/run" class="js-run" data-name="<%= proc.name %>" data-verb="Run"><button class="btn primary">Run accrual for April 2026</button></form>
+      <% } else { %>
+      <p style="color:var(--ink-2);max-width:48ch;margin:0 auto 20px">This process is ready to run. Its steps, policies and dependency graph are in place; execute a run to produce step outcomes and a posted result.</p>
+      <form method="POST" action="/process/<%= proc.slug %>/run" class="js-run" data-name="<%= proc.name %>" data-verb="Run"><button class="btn primary">Run <%= proc.name %></button></form>
+      <% } %>
     </div>
   <% } else if(!run){ %>
     <div class="card pad" style="text-align:center;padding:50px">
@@ -101,16 +115,18 @@
       <a class="btn" href="/process/<%= proc.slug %>/setup">View its definition &rarr;</a>
     </div>
   <% } else if(active==='monitor'){ %>
-    <%- include('fos/monitor', {s,carriers,ctrl,queue,run,summary,proc,frozen,st,heroState,heroLabel,heroTitle,runTime,fmt0,fmt2,signed,pct,decLabel,band}) %>
+    <%- include('fos/overview', {ov:overview,run,summary,proc,frozen,st,runTime,fmt0,fmt2,signed,pct,band}) %>
   <% } else if(active==='execute'){ %>
     <%- include('fos/execute', {run,proc,fmt0,fmt2}) %>
+  <% } else if(active==='flow'){ %>
+    <%- include('fos/flow', {run,proc,fmt0,fmt2,signed,st}) %>
   <% } else { %>
     <%- include('fos/improve', {s,learn,carriers,proc,fmt0,fmt2,signed,pct,run,proposals,versions}) %>
   <% } %>
   </div>
 
   <!-- ── Event ledger rail ─────────────────────────────── -->
-  <% if(active!=='setup'){ %>
+  <% if(active!=='setup' && active!=='history' && active!=='flow'){ %>
   <aside class="rail">
     <div class="card ledger">
       <div class="card-h"><h3>Event Ledger</h3><span class="sub">system of record</span></div>
@@ -258,6 +274,57 @@
 })();
 </script>
 <% } %>
+
+<!-- ── Run confirmation modal (intercepts every form.js-run) ───────────── -->
+<div class="run-modal" id="runModal" aria-hidden="true">
+  <div class="rm-box" role="dialog" aria-modal="true" aria-labelledby="rmTitle">
+    <div class="rm-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+    <h3 id="rmTitle">Run this process?</h3>
+    <p id="rmBody">A fresh run will execute now. You&rsquo;ll be taken straight to it.</p>
+    <div class="rm-actions">
+      <button type="button" class="btn ghost" id="rmCancel">Cancel</button>
+      <button type="button" class="btn primary" id="rmConfirm">Run it</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var modal = document.getElementById('runModal');
+  var title = document.getElementById('rmTitle');
+  var bodyP = document.getElementById('rmBody');
+  var cancel = document.getElementById('rmCancel');
+  var confirm = document.getElementById('rmConfirm');
+  var pending = null;
+
+  function open(form){
+    pending = form;
+    var name = form.getAttribute('data-name') || 'this process';
+    var verb = form.getAttribute('data-verb') || 'Run';
+    title.textContent = verb + ' ' + name + '?';
+    bodyP.innerHTML = 'A fresh run of <b>' + name.replace(/[&<>]/g,'') + '</b> will execute now. You&rsquo;ll be taken straight to the new run.';
+    confirm.disabled = false; confirm.textContent = 'Run it';
+    modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+  }
+  function close(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); pending = null; }
+
+  document.addEventListener('submit', function(e){
+    var form = e.target;
+    if (form && form.classList && form.classList.contains('js-run')){
+      e.preventDefault();
+      open(form);
+    }
+  });
+  cancel.addEventListener('click', close);
+  modal.addEventListener('click', function(e){ if (e.target === modal) close(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && modal.classList.contains('open')) close(); });
+  confirm.addEventListener('click', function(){
+    if (!pending) return;
+    confirm.disabled = true; confirm.textContent = 'Running…';
+    pending.submit(); // programmatic submit bypasses the interceptor
+  });
+})();
+</script>
 <script src="/js/theme.js"></script>
 </body>
 </html>

@@ -12,6 +12,8 @@
 const prisma = require('./db');
 const { registerToolHandler } = require('./toolExecutor');
 const runService = require('./accrual/runService');
+const { runProcess } = require('./runner/processRunner');
+const builder = require('./builder/processBuilder');
 
 const round = (n) => (n == null ? null : Math.round(n));
 const money = (n) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'));
@@ -57,6 +59,80 @@ const FOS_TOOLS = [
     name: 'fos__explain_variance',
     description: 'Structured variance of the latest estimate vs the Denise trailing-average benchmark, by carrier, for narrating "why is the number what it is" or "how do we compare to the old method".',
     inputSchema: { type: 'object', properties: {} },
+  },
+
+  // ── Builder hat (SPEC §11) — engineer the process you own, agentically. ──
+  // Every change is versioned at the object level and written to your build_log.
+  {
+    name: 'fos__create_step',
+    description: 'BUILDER: add a new step to the process you own. Steps form a DAG via dependsOn (the steps whose output this step consumes) and an optional feedbackTo (an upstream step this one proposes changes back to — the improve loop). Set isGate for a materiality/approval gate and pauseAfter to halt for a human.',
+    inputSchema: { type: 'object', properties: {
+      key: { type: 'string', description: 'Short stable key, e.g. "normalize". Derived from name if omitted.' },
+      name: { type: 'string', description: 'Human step name.' },
+      description: { type: 'string' },
+      decisionType: { type: 'string', enum: ['policy_based', 'judgment_based', 'mixed'] },
+      dependsOn: { type: 'array', items: { type: 'string' }, description: 'Keys of upstream steps this consumes.' },
+      feedbackTo: { type: 'string', description: 'Key of an upstream step this proposes changes back to.' },
+      isGate: { type: 'boolean' }, pauseAfter: { type: 'boolean' },
+    }, required: ['name'] },
+  },
+  {
+    name: 'fos__update_step',
+    description: 'BUILDER: edit an existing step (name, description, decisionType, dependsOn, feedbackTo, isGate, pauseAfter). Identified by its key. Bumps the step version and logs the diff.',
+    inputSchema: { type: 'object', properties: {
+      key: { type: 'string', description: 'Key of the step to edit.' },
+      name: { type: 'string' }, description: { type: 'string' },
+      decisionType: { type: 'string', enum: ['policy_based', 'judgment_based', 'mixed'] },
+      dependsOn: { type: 'array', items: { type: 'string' } }, feedbackTo: { type: 'string' },
+      isGate: { type: 'boolean' }, pauseAfter: { type: 'boolean' },
+    }, required: ['key'] },
+  },
+  {
+    name: 'fos__reorder_steps',
+    description: 'BUILDER: set the execution order of the steps. Provide every step key exactly once in the desired order.',
+    inputSchema: { type: 'object', properties: { order: { type: 'array', items: { type: 'string' } } }, required: ['order'] },
+  },
+  {
+    name: 'fos__set_engine',
+    description: 'BUILDER: bind a deterministic engine to a step. Writes an engine file under services/engines/{slug}/ and records it as the step\'s engineSource (the auditable "what computed this step"). Provide the engine body as code, or omit to scaffold a stub.',
+    inputSchema: { type: 'object', properties: {
+      stepKey: { type: 'string', description: 'Key of the step to bind.' },
+      language: { type: 'string', enum: ['js', 'py'], description: 'Engine file language. Default js.' },
+      code: { type: 'string', description: 'The engine source body.' },
+      engineName: { type: 'string', description: 'Override the recorded engineSource label.' },
+    }, required: ['stepKey'] },
+  },
+  {
+    name: 'fos__create_policy',
+    description: 'BUILDER: add a tunable policy to the process. params is a versioned JSON object (the knobs); the definition explains what it governs. Optionally bind it to a step via stepKey.',
+    inputSchema: { type: 'object', properties: {
+      key: { type: 'string' }, name: { type: 'string' }, definition: { type: 'string' },
+      params: { type: 'object' }, scope: { type: 'string', enum: ['org', 'function', 'process', 'step'] },
+      stepKey: { type: 'string' },
+    }, required: ['name'] },
+  },
+  {
+    name: 'fos__update_policy',
+    description: 'BUILDER: edit a policy (name, definition, or params). A params patch merges by key. Bumps the policy version and writes an ObjectVersion + build_log entry.',
+    inputSchema: { type: 'object', properties: {
+      key: { type: 'string', description: 'Key of the policy to edit.' },
+      name: { type: 'string' }, definition: { type: 'string' }, params: { type: 'object' },
+    }, required: ['key'] },
+  },
+  {
+    name: 'fos__attach_tool',
+    description: 'BUILDER: attach a tool/skill to the process (and optionally a step). Reference an existing registry tool by toolSlug, or create one with type+name. Types: skill, mcp, agent, human, prompt, automation.',
+    inputSchema: { type: 'object', properties: {
+      toolSlug: { type: 'string', description: 'Existing registry tool slug.' },
+      type: { type: 'string', enum: ['skill', 'mcp', 'agent', 'human', 'prompt', 'automation'] },
+      name: { type: 'string' }, description: { type: 'string' }, config: { type: 'object' },
+      stepKey: { type: 'string', description: 'Also attach to this step.' }, role: { type: 'string' },
+    } },
+  },
+  {
+    name: 'fos__snapshot_package',
+    description: 'BUILDER: freeze the entire process package (steps, policies, tools) as a new package version. Bumps Process.version and writes a process_package ObjectVersion snapshot for rollback/audit. Call this after a coherent set of edits.',
+    inputSchema: { type: 'object', properties: { note: { type: 'string', description: 'What this version represents.' } } },
   },
 ];
 
@@ -133,11 +209,14 @@ registerToolHandler('fos__', async (toolName, input, context) => {
       }
 
       case 'fos__trigger_run': {
-        if (slug !== runService.PROCESS_SLUG) {
-          return JSON.stringify({ error: 'This process is not engine-bound yet, so a run cannot execute. Only freight-accrual runs today.' });
-        }
-        const r = await runService.executeRun({ period: input.period || 'April 2026', mode: 'adhoc', actor: 'Owner Agent' });
-        return JSON.stringify({ ok: true, runId: r.runId, status: r.status, pointEstimate: round(r.point), autoPosted: r.autoPosted, message: r.autoPosted ? 'Run complete and auto-posted (all carriers within tolerance).' : `Run complete and PAUSED at the gate (${r.status}). A human must sign off before the JE posts.` });
+        const r = await runProcess({ processSlug: slug, period: input.period || 'April 2026', mode: 'adhoc', actor: 'Owner Agent' });
+        const isFreight = slug === runService.PROCESS_SLUG;
+        return JSON.stringify({
+          ok: true, runId: r.runId, status: r.status, pointEstimate: round(r.point), autoPosted: r.autoPosted,
+          message: isFreight
+            ? (r.autoPosted ? 'Run complete and auto-posted (all carriers within tolerance).' : `Run complete and PAUSED at the gate (${r.status}). A human must sign off before the JE posts.`)
+            : `Run complete (${r.status}). This process runs as a generic scaffold until an engine is set on its steps.`,
+        });
       }
 
       case 'fos__sign_off': {
@@ -181,6 +260,43 @@ registerToolHandler('fos__', async (toolName, input, context) => {
           byCarrier: (s.carriers || []).map((c) => ({ carrier: c.key || c.carrier, estimate: round(c.point), benchmark: round(c.baseline), diff: round((c.point || 0) - (c.baseline || 0)) })),
           method: 'Inverse-variance ensemble of the contractual rate-card price and the trailing baseline, with a mix-shift lift and a 90% confidence band. The benchmark is the trailing-3-month average (the Denise method).',
         });
+      }
+
+      // ── Builder hat handlers ──────────────────────────────────────────────
+      case 'fos__create_step': {
+        const r = await builder.createStep(slug, input, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Step '${input.name}' added at #${r.order}.` });
+      }
+      case 'fos__update_step': {
+        const { key, ...patch } = input;
+        const r = await builder.updateStep(slug, key, patch, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Step '${key}' updated (v${r.version}): ${r.changed.join(', ')}.` });
+      }
+      case 'fos__reorder_steps': {
+        const r = await builder.reorderSteps(slug, input.order || [], 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Steps reordered: ${r.order.join(' → ')}.` });
+      }
+      case 'fos__set_engine': {
+        const { stepKey, ...opts } = input;
+        const r = await builder.setEngine(slug, stepKey, opts, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Engine bound to '${stepKey}' as ${r.engineSource} (${r.file}).` });
+      }
+      case 'fos__create_policy': {
+        const r = await builder.createPolicy(slug, input, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Policy '${input.name}' added.` });
+      }
+      case 'fos__update_policy': {
+        const { key, ...patch } = input;
+        const r = await builder.updatePolicy(slug, key, patch, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Policy '${key}' updated (v${r.version}): ${r.changed.join(', ')}.` });
+      }
+      case 'fos__attach_tool': {
+        const r = await builder.attachTool(slug, input, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Tool '${r.tool.name}' attached${r.attachedToStep ? ` to step '${r.attachedToStep}'` : ''}.` });
+      }
+      case 'fos__snapshot_package': {
+        const r = await builder.snapshotPackage(slug, input, 'Owner Agent (Builder)');
+        return JSON.stringify({ ...r, message: `Package frozen at v${r.packageVersion} (${r.steps} steps, ${r.policies} policies).` });
       }
 
       default:

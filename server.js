@@ -288,6 +288,14 @@ async function bootSupervision() {
   } catch (e) {
     console.error('Supervisor scheduler failed to start (non-critical):', e.message);
   }
+  try {
+    // Seed the canonical overview-insights prompt into the registry so it's visible
+    // even before the first insight is generated.
+    const { ensureDefaultPromptTool } = require('./services/runner/insightService');
+    await ensureDefaultPromptTool();
+  } catch (e) {
+    console.error('Insight prompt seed failed (non-critical):', e.message);
+  }
 }
 
 // ─── Startup Seed ─────────────────────────────────────────────────

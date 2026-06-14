@@ -17,6 +17,7 @@
 const API_GROUPS = [
   {
     name: 'Finance OS',
+    audience: 'agent',
     base: '/api/fos',
     blurb: 'The agent-facing core. Drive the freight accrual process end to end: read the process spine, list and inspect runs, execute a new run, sign off (post the JE), and freeze the period. No auth — these are the surfaces an autonomous Improve/Execute agent calls.',
     endpoints: [
@@ -86,6 +87,7 @@ const API_GROUPS = [
 
   {
     name: 'Improve',
+    audience: 'agent',
     base: '/api/fos',
     blurb: 'The closed loop. After invoices land, reconcile the booked accrual against actuals (writes immutable per-carrier variance rows and stages a true-up JE if the portfolio breaches materiality), then generate param-targeted improvement proposals and apply them. Applying a proposal mutates a versioned policy param and writes an immutable ObjectVersion audit row; changes take effect on future runs only, never retroactively.',
     endpoints: [
@@ -145,6 +147,7 @@ const API_GROUPS = [
 
   {
     name: 'Process Owner Agent & Supervision',
+    audience: 'agent',
     base: '/api/fos',
     blurb: 'Every process is owned by exactly one Process Owner Agent — a supervisor that observes live run state, explains it, and can trigger or sign off steps on a human\u2019s instruction. It is NOT in the critical path: the deterministic engine still does the math. A scheduler (or an external cron) drives proactive supervision: auto-run a period when due and nudge a run that has been stuck awaiting a human. Owner agents are auto-provisioned when a process is created and can be (re)provisioned or backfilled here.',
     endpoints: [
@@ -187,6 +190,7 @@ const API_GROUPS = [
 
   {
     name: 'Process Configuration',
+    audience: 'agent',
     base: '/api/fos',
     blurb: 'The construct-a-process surface. Everything a human can do on the Setup page is here as JSON, so an agent (or the process automator) can define a process end to end: create it, edit its definition, add/edit/remove steps and policies, bind tools, and set the improvement trigger. Backed by services/accrual/configService.js — the exact code path the UI forms use.',
     endpoints: [
@@ -379,6 +383,7 @@ const API_GROUPS = [
 
   {
     name: 'Admin',
+    audience: 'admin',
     base: '/api/admin',
     blurb: 'Authentication. Exchange the admin password for an HMAC session token, then send it as the X-Admin-Key header on every admin-scoped endpoint.',
     endpoints: [
@@ -394,6 +399,7 @@ const API_GROUPS = [
 
   {
     name: 'Agents',
+    audience: 'admin',
     base: '/api/agents',
     blurb: 'CRUD for the AI agents that run on the platform. List/read are public; create, update, and delete require the admin key.',
     endpoints: [
@@ -449,6 +455,7 @@ const API_GROUPS = [
 
   {
     name: 'Chat',
+    audience: 'admin',
     base: '/api/chat',
     blurb: 'Conversational interface to an agent: start a conversation, stream or send messages (with RAG + memory + tools), list and inspect conversations, archive them.',
     endpoints: [
@@ -505,6 +512,7 @@ const API_GROUPS = [
 
   {
     name: 'Agent Documents',
+    audience: 'admin',
     base: '/api/agents',
     blurb: 'Per-agent knowledge base (RAG). Upload documents, list them, semantic-search them, and delete them. Admin only.',
     endpoints: [
@@ -524,6 +532,16 @@ const API_GROUPS = [
           { name: 'content', type: 'string', required: true, desc: 'Full text content.' },
           { name: 'sourceType', type: 'string', required: false, desc: 'Source type (default "text").' },
           { name: 'metadata', type: 'object', required: false, desc: 'Arbitrary metadata.' },
+        ],
+        returns: '{ id, name, sourceType, ingested }.',
+      },
+      {
+        op: 'agent_docs_upload', method: 'POST', path: '/api/agents/:agentId/documents/upload', auth: 'admin',
+        summary: 'Attach a file to an agent\u2019s KB. PDFs are parsed server-side, text files are stored as-is; the extracted text is chunked and embedded if an OpenAI key is configured. Multipart form upload.',
+        params: [{ in: 'path', name: 'agentId', type: 'string', required: true, desc: 'Agent id.' }],
+        body: [
+          { name: 'file', type: 'file', required: true, desc: 'The file to upload (multipart/form-data; .pdf or text). Max 20MB.' },
+          { name: 'name', type: 'string', required: false, desc: 'Document name (defaults to the uploaded filename).' },
         ],
         returns: '{ id, name, sourceType, ingested }.',
       },
@@ -552,6 +570,7 @@ const API_GROUPS = [
 
   {
     name: 'Agent Memory',
+    audience: 'admin',
     base: '/api/agents',
     blurb: 'Per-agent structured memory documents keyed by docKey. List, read, upsert, and delete. Admin only.',
     endpoints: [
@@ -600,6 +619,7 @@ const API_GROUPS = [
 
   {
     name: 'Agent Capabilities',
+    audience: 'admin',
     base: '/api/agents',
     blurb: 'Bind shared capabilities (e.g. external MCP servers) to a specific agent. Admin only.',
     endpoints: [
@@ -635,6 +655,7 @@ const API_GROUPS = [
 
   {
     name: 'Capabilities',
+    audience: 'admin',
     base: '/api/capabilities',
     blurb: 'The shared capability library (external MCP servers and tools any agent can draw from). CRUD plus connectivity tests. Admin only.',
     endpoints: [
@@ -699,6 +720,7 @@ const API_GROUPS = [
 
   {
     name: 'LLM Config',
+    audience: 'admin',
     base: '/api/llm-config',
     blurb: 'Platform LLM provider/model selection and encrypted API-key storage. Admin only.',
     endpoints: [
@@ -746,6 +768,7 @@ const API_GROUPS = [
 
   {
     name: 'Settings',
+    audience: 'admin',
     base: '/api/settings',
     blurb: 'Encrypted platform secrets (Resend, Brave Search, etc.). Admin only.',
     endpoints: [
@@ -774,6 +797,7 @@ const API_GROUPS = [
 
   {
     name: 'Process Automator',
+    audience: 'agent',
     base: '/api/automator',
     blurb: 'The AI process builder. Describe a finance process (and attach source documents) and the model drafts a full blueprint: definition, steps, policies, tools, and improve trigger. Propose is conversational (ask, refine); apply persists the blueprint through the same configService the forms and config API use, so an AI-built process is identical to a hand-built one.',
     endpoints: [
