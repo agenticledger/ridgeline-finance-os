@@ -8,6 +8,14 @@
 // Decision gate      = materiality (band width vs threshold) x confidence (cv)
 
 const { round2 } = require('./rateEngine');
+const engineRegistry = require('../engines/engineRegistry');
+
+// The methodology is now agent-editable + versioned (docs/plans/agent-editable-engine.md).
+// The implementation below is the validated BUILT-IN — it is also the seeded v1 and the
+// guaranteed fallback. `estimateAccrual` (exported) delegates to the ACTIVE versioned
+// engine when one is materialized, so an agent's approved edit takes effect on live runs
+// and backtests alike; if no active engine loads, the built-in runs (numbers never break).
+const ENGINE_KEY = 'freight-accrual/estimate';
 
 const Z_90 = 1.645; // 90% two-sided interval
 
@@ -97,7 +105,7 @@ function blend(est, baseline, cal, mixShiftZ = 1) {
 
 // Apply calibration across a full deterministic accrual result (from compute.js).
 // baselines (optional): { peak: { trailing, volatility }, ... } enables the ensemble.
-function estimateAccrual(accrual, calibration, opts = {}) {
+function builtinEstimateAccrual(accrual, calibration, opts = {}) {
   const { baselines = {}, bandZ = Z_90, mixShiftZ = 1 } = opts;
   const carriers = {};
   let point = 0; let low = 0; let high = 0;
@@ -123,4 +131,21 @@ function estimateAccrual(accrual, calibration, opts = {}) {
   return { carriers, portfolio };
 }
 
-module.exports = { estimateCarrier, estimateAccrual, gate, blend, engineWeight, Z_90 };
+// Delegate to the active versioned engine when one is materialized; else built-in.
+// The active engine is already backtest-gated + human-approved, so it runs in-process
+// (the validated freight path stays deterministic). A defensive try/catch falls back to
+// the built-in if the active engine throws at runtime — crash-safety without changing a
+// single number on the happy path.
+function estimateAccrual(accrual, calibration, opts = {}) {
+  const active = engineRegistry.loadActive(ENGINE_KEY);
+  if (active && typeof active.estimateAccrual === 'function') {
+    try {
+      return active.estimateAccrual(accrual, calibration, opts);
+    } catch (e) {
+      console.error(`[engine] active ${ENGINE_KEY} threw at runtime; falling back to built-in:`, e.message);
+    }
+  }
+  return builtinEstimateAccrual(accrual, calibration, opts);
+}
+
+module.exports = { estimateCarrier, estimateAccrual, builtinEstimateAccrual, gate, blend, engineWeight, Z_90 };

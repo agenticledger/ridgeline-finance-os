@@ -738,3 +738,32 @@ model ObjectVersion {
   @@index([objectType, objectId])
   @@map("object_versions")
 }
+
+// Code-body versioning for agent-editable engines (methodology). The active row's
+// body is materialized to services/engines/{engineKey}.js and loaded by the runner;
+// every edit is a new version so rollback restores a prior body. DB-as-truth.
+enum EngineVersionStatus {
+  draft
+  active
+  superseded
+  rolled_back
+}
+
+model EngineVersion {
+  id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  engineKey  String              @map("engine_key") @db.VarChar(160) // e.g. "freight-accrual/estimate"
+  version    Int
+  language   String              @default("js") @db.VarChar(8)
+  body       String              @db.Text
+  status     EngineVersionStatus @default(draft)
+  backtest   Json?               // stored scoreboard for this version (portfolio MAE, coverage, etc.)
+  rationale  String?             @db.Text
+  authoredBy String              @map("authored_by") @db.VarChar(120)
+  approvedBy String?             @map("approved_by") @db.VarChar(120)
+  approvedAt DateTime?           @map("approved_at") @db.Timestamptz()
+  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@unique([engineKey, version])
+  @@index([engineKey])
+  @@map("engine_versions")
+}

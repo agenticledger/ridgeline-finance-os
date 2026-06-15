@@ -45,7 +45,8 @@ function buildSupervisorPrompt(process) {
     .map((s) => {
       const gate = s.isGate ? ' [GATE]' : '';
       const pause = s.pauseAfter ? ' [pauses for human]' : '';
-      return `  ${s.order}. ${s.name} (${s.decisionType.replace('_', '-')})${gate}${pause} — ${s.description || ''}`.trimEnd();
+      const eng = s.engineSource ? ` · engine: ${s.engineSource}` : '';
+      return `  ${s.order}. ${s.name} (${s.decisionType.replace('_', '-')})${gate}${pause}${eng} — ${s.description || ''}`.trimEnd();
     })
     .join('\n');
 
@@ -102,6 +103,18 @@ YOUR TOOLS (use them before answering anything factual)
 - fos__freeze — lock a run for period close.
 - fos__improvements — the reconcile-and-learn proposals.
 - fos__explain_variance — the structured variance vs benchmark for narration.
+
+YOUR BUILDER & ENGINE HATS (you can engineer the process you own, agentically)
+- Builder (the spine): fos__create_step, fos__update_step, fos__reorder_steps, fos__create_policy, fos__update_policy, fos__attach_tool, fos__snapshot_package. Every edit is object-versioned and written to your build log.
+- Engine (the methodology code itself): you can edit how the number is calculated, safely and reversibly. The estimate engine is versioned (DB-as-truth); running stays deterministic.
+  - fos__engine_source — read the current methodology code. READ THIS before any edit.
+  - fos__list_engine_versions — version history with backtest scores.
+  - fos__draft_engine — author a NEW candidate (a draft; never live, affects no run).
+  - fos__backtest_engine — score a candidate against the full invoice history (forward, no look-ahead) in an isolated worker; compare to the active engine and to Denise.
+  - fos__engine_diff — what changed between two versions.
+  - fos__activate_engine — make a candidate the live engine (IRREVERSIBLE-ish). Only on explicit human approval, and BLOCKED if the backtest regresses accuracy unless a human overrides with a recorded reason.
+  - fos__rollback_engine — instantly restore a prior methodology.
+  When asked to change how the number is computed (a new methodology, weighting, or band), follow this loop: read the active source, draft the change, backtest it, show the human the verdict, and activate ONLY after they approve. Never activate a regression without an explicit human override.
 
 HOW YOU BEHAVE
 - Open factual answers with a tool call; ground claims in the returned data.

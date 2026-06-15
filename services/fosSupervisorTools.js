@@ -14,6 +14,31 @@ const { registerToolHandler } = require('./toolExecutor');
 const runService = require('./accrual/runService');
 const { runProcess } = require('./runner/processRunner');
 const builder = require('./builder/processBuilder');
+const engineRegistry = require('./engines/engineRegistry');
+
+// Max allowed regression in portfolio MAE before activate is blocked (human override
+// required). A candidate may improve freely; it may not silently make the booked
+// number worse than the current active engine by more than this margin.
+const ENGINE_REGRESSION_THRESHOLD = 0.02; // 2%
+
+function engineKeyFor(slug, input) {
+  return (input && input.engineKey) || `${slug}/estimate`;
+}
+
+// Minimal line-level diff for showing what changed between two engine bodies.
+function lineDiff(beforeBody, afterBody) {
+  const a = (beforeBody || '').split('\n');
+  const b = (afterBody || '').split('\n');
+  const out = [];
+  const max = Math.max(a.length, b.length);
+  let added = 0; let removed = 0;
+  for (let i = 0; i < max; i++) {
+    if (a[i] === b[i]) continue;
+    if (a[i] !== undefined && !b.includes(a[i])) { out.push(`- ${a[i]}`); removed++; }
+    if (b[i] !== undefined && !a.includes(b[i])) { out.push(`+ ${b[i]}`); added++; }
+  }
+  return { added, removed, sample: out.slice(0, 60).join('\n') };
+}
 
 const round = (n) => (n == null ? null : Math.round(n));
 const money = (n) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'));
@@ -147,6 +172,57 @@ const FOS_TOOLS = [
     name: 'fos__snapshot_package',
     description: 'BUILDER: freeze the entire process package (steps, policies, tools) as a new package version. Bumps Process.version and writes a process_package ObjectVersion snapshot for rollback/audit. Call this after a coherent set of edits.',
     inputSchema: { type: 'object', properties: { note: { type: 'string', description: 'What this version represents.' } } },
+  },
+
+  // ── Engine hat (methodology) — edit the CALCULATION CODE, safely. ──
+  // The deterministic estimate engine is versioned (DB-as-truth). You author a CANDIDATE,
+  // backtest it against history (no look-ahead) in an isolated worker, then — only on a
+  // human's instruction and only if it does not regress accuracy — activate it. Running
+  // stays deterministic; activation just swaps which validated code the engine loads.
+  {
+    name: 'fos__list_engine_versions',
+    description: 'ENGINE: list the versions of the methodology engine you own (version, status draft|active|superseded|rolled_back, backtest score, who authored/approved). Use to see history and find a version id before diff/backtest/activate/rollback.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'fos__engine_source',
+    description: 'ENGINE: read the full source code of an engine version so you can understand the current methodology before editing it. Omit version for the ACTIVE version. ALWAYS read the active source before drafting a change.',
+    inputSchema: { type: 'object', properties: { version: { type: 'number', description: 'Version number; omit for the active version.' } } },
+  },
+  {
+    name: 'fos__draft_engine',
+    description: 'ENGINE: author a NEW candidate version of the methodology. Provide the FULL module source (a self-contained CommonJS module exporting estimateAccrual(accrual, calibration, opts) -> { carriers, portfolio }; no external requires). This writes a DRAFT only — it does NOT go live and does NOT affect any run until backtested and activated. Always fos__engine_source the active version first and keep the same export contract.',
+    inputSchema: { type: 'object', properties: {
+      code: { type: 'string', description: 'Full self-contained engine module source.' },
+      rationale: { type: 'string', description: 'Why you are changing the methodology (recorded with the version + build log).' },
+    }, required: ['code', 'rationale'] },
+  },
+  {
+    name: 'fos__backtest_engine',
+    description: 'ENGINE: score a candidate version against the full invoice history with the forward, no-look-ahead harness, in an isolated worker. Returns portfolio MAE vs the Denise benchmark, 90% band coverage, and a verdict comparing it to the current active engine. Run this on a draft before proposing activation. Omit version for the active version.',
+    inputSchema: { type: 'object', properties: { version: { type: 'number', description: 'Version to backtest; omit for the active version.' } } },
+  },
+  {
+    name: 'fos__engine_diff',
+    description: 'ENGINE: show the code changes between two engine versions (added/removed line count + sample). Omit toVersion to use the active version; omit fromVersion to diff against the active version.',
+    inputSchema: { type: 'object', properties: {
+      fromVersion: { type: 'number', description: 'Baseline version; defaults to the active version.' },
+      toVersion: { type: 'number', description: 'Version to compare; defaults to the active version.' },
+    } },
+  },
+  {
+    name: 'fos__activate_engine',
+    description: 'ENGINE — IRREVERSIBLE-ish cutover: make a candidate version the ACTIVE engine that real runs use. Only call when the human in THIS conversation has explicitly approved this specific version. BLOCKED unless the version has a passing backtest that does not regress portfolio MAE vs the current active engine by more than the threshold — UNLESS override:true with a recorded reason (the human accepts a regression on purpose). Always show the backtest verdict and ask for confirmation before calling.',
+    inputSchema: { type: 'object', properties: {
+      version: { type: 'number', description: 'The candidate version to activate.' },
+      override: { type: 'boolean', description: 'Set true ONLY when a human explicitly accepts a backtest regression.' },
+      reason: { type: 'string', description: 'Required when override is true: why the human accepts the regression.' },
+    }, required: ['version'] },
+  },
+  {
+    name: 'fos__rollback_engine',
+    description: 'ENGINE: roll back to a prior version by re-activating it (history preserved). Use to instantly restore the previous methodology if a change misbehaves. Only on a human instruction.',
+    inputSchema: { type: 'object', properties: { version: { type: 'number', description: 'The version to roll back to.' } }, required: ['version'] },
   },
 ];
 
@@ -329,6 +405,126 @@ registerToolHandler('fos__', async (toolName, input, context) => {
       case 'fos__snapshot_package': {
         const r = await builder.snapshotPackage(slug, input, 'Owner Agent (Builder)');
         return JSON.stringify({ ...r, message: `Package frozen at v${r.packageVersion} (${r.steps} steps, ${r.policies} policies).` });
+      }
+
+      // ── Engine hat handlers ───────────────────────────────────────────────
+      case 'fos__list_engine_versions': {
+        const engineKey = engineKeyFor(slug, input);
+        const versions = await engineRegistry.listVersions(engineKey);
+        return JSON.stringify({
+          engineKey,
+          count: versions.length,
+          versions: versions.map((v) => ({
+            version: v.version, status: v.status, authoredBy: v.authoredBy, approvedBy: v.approvedBy,
+            rationale: v.rationale, portfolioMae: v.backtest ? v.backtest.portfolioMae : null,
+            improvementPct: v.backtest ? v.backtest.improvementPct : null, createdAt: v.createdAt,
+          })),
+        });
+      }
+
+      case 'fos__engine_source': {
+        const engineKey = engineKeyFor(slug, input);
+        const row = input.version != null
+          ? await engineRegistry.getVersion(engineKey, input.version)
+          : await engineRegistry.getActiveVersion(engineKey);
+        if (!row) return JSON.stringify({ error: 'Engine version not found.' });
+        return JSON.stringify({ engineKey, version: row.version, status: row.status, language: row.language, source: row.body });
+      }
+
+      case 'fos__draft_engine': {
+        const engineKey = engineKeyFor(slug, input);
+        if (!input.code) return JSON.stringify({ error: 'code (full engine module source) is required.' });
+        const draft = await engineRegistry.createDraft(engineKey, { body: input.code, rationale: input.rationale || '', authoredBy: 'Owner Agent' });
+        return JSON.stringify({
+          ok: true, engineKey, version: draft.version, status: draft.status,
+          message: `Draft v${draft.version} written (not live). Backtest it with fos__backtest_engine before proposing activation.`,
+        });
+      }
+
+      case 'fos__backtest_engine': {
+        const engineKey = engineKeyFor(slug, input);
+        const target = input.version != null ? input.version : (await engineRegistry.getActiveVersion(engineKey) || {}).version;
+        if (target == null) return JSON.stringify({ error: 'No version to backtest.' });
+        let result;
+        try {
+          result = await engineRegistry.backtestVersion(engineKey, target);
+        } catch (e) {
+          return JSON.stringify({ ok: false, version: target, error: `Backtest failed: ${e.message}` });
+        }
+        const active = await engineRegistry.getActiveVersion(engineKey);
+        const activeMae = active && active.backtest ? active.backtest.portfolioMae : null;
+        let verdict = 'no active baseline to compare';
+        if (activeMae != null && target !== active.version) {
+          const delta = result.portfolioMae - activeMae;
+          verdict = delta <= 0
+            ? `IMPROVES: portfolio MAE ${activeMae} -> ${result.portfolioMae} (better by ${money(-delta)})`
+            : `REGRESSES: portfolio MAE ${activeMae} -> ${result.portfolioMae} (worse by ${money(delta)})`;
+        }
+        return JSON.stringify({
+          ok: true, engineKey, version: target,
+          portfolioMae: result.portfolioMae, deniseMae: result.deniseMae,
+          improvementPctVsDenise: result.improvementPct, bandCoverage: `${result.bandHits}/${result.bandTotal} (${result.bandCoverage}%)`,
+          verdictVsActive: verdict, perCarrier: result.perCarrier,
+        });
+      }
+
+      case 'fos__engine_diff': {
+        const engineKey = engineKeyFor(slug, input);
+        const active = await engineRegistry.getActiveVersion(engineKey);
+        const fromV = input.fromVersion != null ? input.fromVersion : (active && active.version);
+        const toV = input.toVersion != null ? input.toVersion : (active && active.version);
+        const from = await engineRegistry.getVersion(engineKey, fromV);
+        const to = await engineRegistry.getVersion(engineKey, toV);
+        if (!from || !to) return JSON.stringify({ error: 'One or both versions not found.' });
+        const d = lineDiff(from.body, to.body);
+        return JSON.stringify({ engineKey, from: fromV, to: toV, linesAdded: d.added, linesRemoved: d.removed, diff: d.sample });
+      }
+
+      case 'fos__activate_engine': {
+        const engineKey = engineKeyFor(slug, input);
+        if (input.version == null) return JSON.stringify({ error: 'version is required.' });
+        const target = await engineRegistry.getVersion(engineKey, input.version);
+        if (!target) return JSON.stringify({ error: `Version ${input.version} not found.` });
+        if (!target.backtest) return JSON.stringify({ error: `v${input.version} has no backtest. Run fos__backtest_engine first.` });
+
+        const active = await engineRegistry.getActiveVersion(engineKey);
+        let activeMae = active && active.backtest ? active.backtest.portfolioMae : null;
+        if (activeMae == null && active) {
+          try { const r = await engineRegistry.backtestVersion(engineKey, active.version); activeMae = r.portfolioMae; } catch (e) { /* leave null */ }
+        }
+        if (activeMae != null) {
+          const limit = activeMae * (1 + ENGINE_REGRESSION_THRESHOLD);
+          const regresses = target.backtest.portfolioMae > limit;
+          if (regresses && !input.override) {
+            return JSON.stringify({
+              ok: false, blocked: true,
+              message: `Activation BLOCKED: v${input.version} portfolio MAE ${target.backtest.portfolioMae} regresses vs active v${active.version} (${activeMae}, allowed up to ${Math.round(limit)}). Confirm with the human; to proceed anyway call again with override:true and a reason.`,
+            });
+          }
+          if (regresses && input.override && !input.reason) {
+            return JSON.stringify({ ok: false, blocked: true, message: 'override requires a reason explaining why the human accepts the regression.' });
+          }
+        }
+
+        await engineRegistry.activate(engineKey, input.version, { approvedBy: 'Owner Agent (on human instruction)' });
+        await prisma.objectVersion.create({ data: {
+          objectType: 'engine', objectId: target.id, version: target.version,
+          diff: { engineKey, activated: input.version, portfolioMae: target.backtest.portfolioMae, override: !!input.override, reason: input.reason || null },
+          source: 'agent', approvedBy: 'Owner Agent (on human instruction)', approvedAt: new Date(),
+        } }).catch(() => {});
+        return JSON.stringify({
+          ok: true, engineKey, activated: input.version,
+          message: `Engine v${input.version} is now ACTIVE. Live runs and backtests use it. Portfolio MAE ${target.backtest.portfolioMae} (vs Denise ${target.backtest.deniseMae}).${input.override ? ' Activated via human override of a backtest regression.' : ''}`,
+        });
+      }
+
+      case 'fos__rollback_engine': {
+        const engineKey = engineKeyFor(slug, input);
+        if (input.version == null) return JSON.stringify({ error: 'version is required.' });
+        const target = await engineRegistry.getVersion(engineKey, input.version);
+        if (!target) return JSON.stringify({ error: `Version ${input.version} not found.` });
+        await engineRegistry.rollback(engineKey, input.version, { approvedBy: 'Owner Agent (on human instruction)' });
+        return JSON.stringify({ ok: true, engineKey, rolledBackTo: input.version, message: `Rolled back: engine v${input.version} is active again.` });
       }
 
       default:
