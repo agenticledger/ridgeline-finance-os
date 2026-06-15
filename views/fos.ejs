@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=29">
+  <link rel="stylesheet" href="/css/fos.css?v=30">
 </head>
 <body>
 <%
@@ -133,14 +133,27 @@
     <div class="card ledger">
       <div class="card-h"><h3>Event Ledger</h3><span class="sub">system of record</span></div>
       <div style="max-height:560px;overflow:auto">
-        <% if(run && run.events){ run.events.forEach(function(e){ %>
+        <%
+          // Collapse runs of identical consecutive events (e.g. repeated supervisor
+          // nudges) into one row with a count + time span so the ledger reads as a
+          // credible system of record, not a stream of duplicates.
+          var groups = [];
+          (run && run.events ? run.events : []).forEach(function(e){
+            var key = e.action + '|' + ((e.detail&&e.detail.message)||'') + '|' + (e.actor||'');
+            var last = groups[groups.length-1];
+            if(last && last.key === key){ last.count++; last.last = e; }
+            else groups.push({ key:key, first:e, last:e, count:1 });
+          });
+          function evTime(e){ return new Date(e.createdAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'}); }
+        %>
+        <% groups.forEach(function(g){ var e=g.first; %>
           <div class="ev">
             <span class="tk <%= evPlane(e.action) %>"><%= (e.detail&&e.detail.tag)? e.detail.tag.toUpperCase() : e.action.slice(0,4) %></span>
-            <div class="em"><b><%= e.action.replace(/_/g,' ') %></b><%= (e.detail&&e.detail.message)||'' %>
-              <div class="et"><%= e.actor %> · <%= new Date(e.createdAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'}) %></div>
+            <div class="em"><b><%= e.action.replace(/_/g,' ') %></b><% if(g.count>1){ %><span class="evcount">×<%= g.count %></span><% } %><%= (e.detail&&e.detail.message)||'' %>
+              <div class="et"><%= e.actor %> · <%= evTime(g.first) %><% if(g.count>1){ %>–<%= evTime(g.last) %><% } %></div>
             </div>
           </div>
-        <% }) } %>
+        <% }) %>
       </div>
     </div>
   </aside>

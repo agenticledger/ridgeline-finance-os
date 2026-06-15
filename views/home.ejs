@@ -10,11 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=29">
+  <link rel="stylesheet" href="/css/fos.css?v=30">
   <style>
     /* Cyan-tinted hairline that reads as "designed", not a default gray box. */
     .home{--cl:color-mix(in srgb,var(--accent) 15%,var(--line));--cl-hi:color-mix(in srgb,var(--accent) 42%,var(--line));
-      max-width:var(--appw);margin:0 auto;padding:34px 24px 90px}
+      max-width:var(--appw);margin:0 auto;padding:34px 24px 130px}
+    /* Keep the rail's last link clear of the floating "Ask your agents" FAB. */
+    .rail .tools-foot{padding-bottom:22px}
 
     /* Greeting */
     .home-greet{margin-bottom:26px}
@@ -170,13 +172,11 @@
           </a>
         <% }) %>
       </div>
-    </section>
 
-    <!-- right rail -->
-    <aside class="rail">
-      <!-- recent activity -->
+      <!-- recent activity — lives in the main column so the command center
+           reads as: what needs you, your agents, what just happened. -->
+      <div class="sec-h" style="margin-top:34px"><h2>Recent activity</h2></div>
       <div class="railcard">
-        <div class="rc-h">Recent activity</div>
         <% if (activity.length) { %>
           <div class="feed">
             <% activity.forEach(function(f){ %>
@@ -187,7 +187,10 @@
           <div class="empty-rail">No runs yet.</div>
         <% } %>
       </div>
+    </section>
 
+    <!-- right rail -->
+    <aside class="rail">
       <!-- tools registry snapshot -->
       <div class="railcard">
         <div class="rc-h">Tools Registry <span class="rc-cnt"><%= registryTotal %></span></div>

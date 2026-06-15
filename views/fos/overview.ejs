@@ -59,7 +59,8 @@
   }
   function kvBlock(b){
     var h='<section class="card"><div class="card-h"><h3>'+esc(b.title)+'</h3>'+(b.sub?'<span class="sub">'+esc(b.sub)+'</span>':'')+'</div><div class="card-b"><section class="kpis" style="margin:0">';
-    (b.items||[]).forEach(function(it){ h+='<div class="kpi"><div class="lab">'+esc(it.label)+'</div><div class="val">'+fmtVal(it.value,it.format)+'</div>'+(it.note?'<div class="note">'+esc(it.note)+'</div>':'')+'</div>'; });
+    var numFmt={money0:1,money2:1,signed:1,pct:1};
+    (b.items||[]).forEach(function(it){ var txt=!numFmt[it.format]; h+='<div class="kpi"><div class="lab">'+esc(it.label)+'</div><div class="val'+(txt?' txt':'')+'">'+fmtVal(it.value,it.format)+'</div>'+(it.note?'<div class="note">'+esc(it.note)+'</div>':'')+'</div>'; });
     return h+'</section></div></section>';
   }
   function linksBlock(b){
@@ -218,20 +219,22 @@
   </div>
 </section>
 
-<!-- ANALYSIS — the working that justifies the number -->
+<!-- ANALYSIS — the working that justifies the number (read-only: flatter chrome) -->
 <% if(ov.analysis && ov.analysis.length){ %>
 <div class="zone-h"><h2>Analysis</h2><span class="zsub">how this run got to the number</span></div>
-<% ov.analysis.forEach(function(b){ %><%- renderBlock(b) %><% }) %>
+<div class="zone"><% ov.analysis.forEach(function(b){ %><%- renderBlock(b) %><% }) %></div>
 <% } %>
 
 <!-- RESULT — the artifact this run hands off (always shown; honest empty state) -->
 <div class="zone-h"><h2>Result</h2><span class="zsub">what this run produced</span></div>
+<div class="zone">
 <% if(ov.result && ov.result.length){ ov.result.forEach(function(b){ %><%- renderBlock(b) %><% }) } else { %>
 <section class="card"><div class="card-b"><p style="color:var(--muted);margin:0">No output artifact for this run yet &mdash; no engine is bound to this process&rsquo;s posting step.</p></div></section>
 <% } %>
+</div>
 
 <!-- OTHER DETAILS — optional appendix / provenance -->
 <% if(ov.details && ov.details.length){ %>
 <div class="zone-h"><h2>Other details</h2><span class="zsub">supporting references &amp; provenance</span></div>
-<% ov.details.forEach(function(b){ %><%- renderBlock(b) %><% }) %>
+<div class="zone"><% ov.details.forEach(function(b){ %><%- renderBlock(b) %><% }) %></div>
 <% } %>

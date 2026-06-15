@@ -10,13 +10,22 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/fos.css?v=29">
+  <link rel="stylesheet" href="/css/fos.css?v=30">
   <style>
     .viewtoggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; margin-left: 4px; }
     .viewtoggle a { padding: 6px 13px; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-2); text-decoration: none; display: flex; align-items: center; gap: 6px; }
     .viewtoggle a.on { background: var(--accent-soft); color: var(--accent-ink); }
     .viewtoggle a + a { border-left: 1px solid var(--line-strong); }
     .viewtoggle svg { width: 14px; height: 14px; }
+    .morefns-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+    .morefn { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel); text-decoration: none; transition: border-color .15s, background .15s; }
+    .morefn:hover { border-color: var(--line-strong); background: var(--panel-2); }
+    .morefn-ic { width: 32px; height: 32px; flex: none; border-radius: 9px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+    .morefn-ic svg { width: 16px; height: 16px; }
+    .morefn-id { flex: 1; min-width: 0; }
+    .morefn-id b { display: block; font-size: 13.5px; font-weight: 650; color: var(--ink); }
+    .morefn-id small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .morefn-add { flex: none; font-size: 12px; font-weight: 650; color: var(--accent-ink); }
   </style>
 </head>
 <body>
@@ -71,12 +80,19 @@
     <a class="btn primary cmd-new" href="/automator">+ New process</a>
   </div>
 
-  <% subs.forEach(function(sf){
+  <%
+    // Lead with finance functions that actually have processes; tuck the empty
+    // ones into a single "More functions" disclosure so the page isn't a long
+    // list of empty placeholders.
+    const populatedSubs = subs.filter(function(sf){ return (byFn[sf.slug] || []).length; });
+    const emptySubs = subs.filter(function(sf){ return !(byFn[sf.slug] || []).length; });
+  %>
+  <% populatedSubs.forEach(function(sf){
        const list = byFn[sf.slug] || [];
        const sigs = {};
        list.forEach(function(p){ sigs[p.signal] = true; });
   %>
-    <details class="fnsec" <%= list.length ? 'open' : '' %>>
+    <details class="fnsec" open>
       <summary>
         <svg class="fnsec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         <span class="fnsec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><%- ic[sf.icon] || ic.book %></svg></span>
@@ -91,36 +107,54 @@
         <a class="fnsec-add" href="/automator?function=<%= sf.slug %>" title="Add a process to <%= sf.name %>">+ Add</a>
       </summary>
       <div class="fnsec-body">
-        <% if(list.length){ %>
-          <div class="procgrid">
-            <% list.forEach(function(p){ %>
-              <div class="proctile <%= p.signal %>">
-                <div class="pt-top">
-                  <span class="pt-glyph"><%= p.name.slice(0,1).toUpperCase() %></span>
-                  <span class="pt-sig <%= p.signal %>"><span class="d"></span><%= sigLabel(p) %></span>
-                </div>
-                <div class="pt-name"><%= p.name %></div>
-                <div class="pt-meta">
-                  <span><b><%= p.stepCount %></b> steps</span>
-                  <span><b><%= p.runCount %></b> runs</span>
-                  <span style="text-transform:capitalize"><%= p.frequency %> &middot; <%= p.mode %></span>
-                </div>
-                <div class="pt-acts">
-                  <a class="tact" href="/process/<%= p.slug %>/setup?section=overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Configure</a>
-                  <a class="tact <%= p.runnable?'go':'' %>" href="/process/<%= p.slug %>/monitor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Manage</a>
-                </div>
+        <div class="procgrid">
+          <% list.forEach(function(p){ %>
+            <div class="proctile <%= p.signal %>">
+              <div class="pt-top">
+                <span class="pt-glyph"><%= p.name.slice(0,1).toUpperCase() %></span>
+                <span class="pt-sig <%= p.signal %>"><span class="d"></span><%= sigLabel(p) %></span>
               </div>
-            <% }) %>
-          </div>
-        <% } else { %>
-          <a class="fnempty" href="/automator?function=<%= sf.slug %>">
-            <span class="fe-plus">+</span>
-            <span>No processes yet. <b>Define one</b> on the Finance OS model.</span>
-          </a>
-        <% } %>
+              <div class="pt-name"><%= p.name %></div>
+              <div class="pt-meta">
+                <span><b><%= p.stepCount %></b> steps</span>
+                <span><b><%= p.runCount %></b> runs</span>
+                <span style="text-transform:capitalize"><%= p.frequency %> &middot; <%= p.mode %></span>
+              </div>
+              <div class="pt-acts">
+                <a class="tact" href="/process/<%= p.slug %>/setup?section=overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Configure</a>
+                <a class="tact <%= p.runnable?'go':'' %>" href="/process/<%= p.slug %>/monitor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Manage</a>
+              </div>
+            </div>
+          <% }) %>
+        </div>
       </div>
     </details>
   <% }) %>
+
+  <% if(emptySubs.length){ %>
+    <details class="fnsec morefns">
+      <summary>
+        <svg class="fnsec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="fnsec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span>
+        <div class="fnsec-id">
+          <h2>More finance functions</h2>
+          <p>Ready to define. No processes yet.</p>
+        </div>
+        <span class="fnsec-count"><%= emptySubs.length %></span>
+      </summary>
+      <div class="fnsec-body">
+        <div class="morefns-grid">
+          <% emptySubs.forEach(function(sf){ %>
+            <a class="morefn" href="/automator?function=<%= sf.slug %>" title="Add a process to <%= sf.name %>">
+              <span class="morefn-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><%- ic[sf.icon] || ic.book %></svg></span>
+              <span class="morefn-id"><b><%= sf.name %></b><small><%= sf.blurb %></small></span>
+              <span class="morefn-add">+ Add</span>
+            </a>
+          <% }) %>
+        </div>
+      </div>
+    </details>
+  <% } %>
 
   <% if(byFn.unassigned){ %>
     <details class="fnsec" open>

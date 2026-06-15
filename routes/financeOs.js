@@ -234,18 +234,31 @@ async function buildHome(req, res) {
   });
   const inbox = [];
   openRuns.forEach((r) => {
-    (r.actionItems || []).forEach((ai) => {
-      inbox.push({
-        title: ai.title,
-        detail: ai.detail || '',
-        amount: ai.amount,
-        severity: ai.severity,
-        procName: r.process ? r.process.name : 'Process',
-        procSlug: r.process ? r.process.slug : null,
-        runId: r.id,
-        initial: initials(r.process ? r.process.name : 'P').slice(0, 1),
+    const procName = r.process ? r.process.name : 'Process';
+    const procSlug = r.process ? r.process.slug : null;
+    const initial = initials(procName).slice(0, 1);
+    const open = r.actionItems || [];
+    if (open.length) {
+      open.forEach((ai) => {
+        inbox.push({
+          title: ai.title,
+          detail: ai.detail || '',
+          amount: ai.amount,
+          severity: ai.severity,
+          procName, procSlug, runId: r.id, initial,
+        });
       });
-    });
+    } else {
+      // Run still awaits the human even with every action item cleared —
+      // the sign-off itself is the thing that needs you.
+      inbox.push({
+        title: 'Ready to sign off',
+        detail: `${r.period} run reviewed. Sign off to post the journal entry.`,
+        amount: r.totalAccrual != null ? Number(r.totalAccrual) : null,
+        severity: 'info',
+        procName, procSlug, runId: r.id, initial,
+      });
+    }
   });
 
   // Recent activity — the latest runs across every process.
